@@ -9,7 +9,8 @@
    */
 
   const tjQuery = (() => {
-    
+    "use strict";
+
     class TjQueryCollection extends Array {
       
       constructor(items) {
@@ -17,12 +18,17 @@
       }
 
       /**
-       * Array.forEach()
+       * Loop through elements, return false on stop.
        * @param {function} callback 
        * @returns {this}
        */
       each (callback) {
-        this.forEach(callback);
+        let index = 0;
+        for (let elem of this) {
+          if (callback.call(this, elem, index++, this) === false) {
+            break;
+          }
+        }
         return this;
       }
       
@@ -56,7 +62,12 @@
         let found = false;
         let sel = $(selector);
         this.each((elem) => {
-          found = found || sel.contains(elem);
+          sel.each(function(test) {
+            return !(found = found || elem.contains(test));
+          });
+          if (found) {
+            return false;
+          }
         });
 
         return found;
@@ -71,12 +82,12 @@
         let all = true;
         if (typeof selector === "string") {
           this.each((elem) => {
-            all = all && elem.matches(selector);
+            return all = all && elem.matches(selector);
           });
         } else {
           let test = $(selector);
           this.each((elem) => {
-            all = all && ~test.indexOf(elem);
+            return all = all && ~test.indexOf(elem);
           });
         }
         return !!all;
@@ -118,7 +129,7 @@
         this.each((elem) => {
           events.forEach(function (ev) {
             elem.addEventListener(ev, callback, options)
-          })
+          });
         });
         return this;
       };
@@ -152,10 +163,11 @@
           return this;
         }
         this.on('click', callback);
-        this.attr('tabindex', 0).addClass('clickable');
         this
-          .not('a[href], button')
+          .addClass('tjq-click')
+          .not('a[href], button, input[type="button"], input[type="submit"]')
           .once('tjqAllyClick')
+          .attr('tabindex', 0)
           .on('keydown', () => {
             if (e.key === 13) { // Enter key pressed
               e.currentTarget.click();
@@ -283,11 +295,11 @@
         let res = [];
         this.each((elem, index) => {
           let $elem = $(elem);
-          let once = $elem.data('once') || [];
+          let once = $elem.data('tjqOnce') || [];
           if(!~once.indexOf(identifier)) {
             once.push(identifier);
             res.push(elem);
-            $elem.data('once', once);
+            $elem.data('tjqOnce', once);
             
             if(typeof identifier === 'function') {
               identifier.call(elem, index);
@@ -363,6 +375,7 @@
       
       /**
        * HTMLElement.parentNode recursive, filtered by selector.
+       * @param {string} selector
        * @returns {TjQueryCollection}
        */
       parents(selector) {
@@ -380,6 +393,7 @@
       
       /**
        * HTMLElement.parentNode recursive, limit to one that matches selector.
+       * @param {string} selector
        * @returns {TjQueryCollection}
        */
       closest(selector) {
@@ -402,15 +416,13 @@
       if (!c && selector instanceof TjQueryCollection) return selector;
     
       let selectors = (selector instanceof Array) ? selector : [selector];
-    
+      let context = tjqDocument;
       if (c) {
         if (!(c instanceof TjQueryCollection)) {
           context = $(c)
         } else {
           context = c;
         }
-      } else {
-        context = tjqDocument;
       }
     
       let elems = [];
