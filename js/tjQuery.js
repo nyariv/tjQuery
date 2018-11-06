@@ -13,6 +13,10 @@
 
     class TjQueryCollection extends Array {
       
+      /**
+       * 
+       * @param {HTMLElement[]} items 
+       */
       constructor(items) {
         super(...items);
       }
@@ -87,10 +91,10 @@
         } else {
           let test = $(selector);
           this.each((elem) => {
-            return all = all && ~test.indexOf(elem);
+            return all = all && test.includes(elem);
           });
         }
-        return !!all;
+        return all;
       }
       
       /**
@@ -99,8 +103,12 @@
        * @returns {TjQueryCollection}
        */
       not(selector) {
+        let sel = selector;
+        if (typeof selector !== 'string') {
+          sel = $(selector)
+        }
         return $(this.filter((elem) => {
-          return !$(elem).is(selector);
+          return !$(elem).is(sel);
         }));
       }
       
@@ -165,11 +173,12 @@
         this.on('click', callback);
         this
           .addClass('tjq-click')
-          .not('a[href], button, input[type="button"], input[type="submit"]')
+          .not('a[href], button, input, select, textarea')
           .once('tjqAllyClick')
           .attr('tabindex', 0)
-          .on('keydown', () => {
-            if (e.key === 13) { // Enter key pressed
+          .attr('role', 'button')
+          .on('keydown', (e) => {
+            if (e.keyCode === 13) { // Enter key pressed
               e.currentTarget.click();
             }
           });
@@ -192,6 +201,18 @@
         
         return this[0] ? this[0].getAttribute(key) : null;
       }
+
+      /**
+       * HTMLElement.removeAttribute()
+       * @param {string} key 
+       */
+      removeAttr(key) {
+        this.each((elem) => {
+          elem.removeAttribute(key);
+        });
+
+        return this;
+      }
       
       /**
        * HTMLElement.value
@@ -211,6 +232,21 @@
         }
         return this[0] ? this[0].value : null;
       }
+
+      /**
+       * HTMLElement.textContent
+       * @param {string} set 
+       */
+      text(set) {
+        if (typeof set !== 'undefined') {
+          this.each((elem) => {
+            elem.textContent = set;
+          });
+          return this;
+        }
+
+        return this[0] ? this[0].textContent : null;
+      }
       
       /**
        * Store/retrieve abitrary data on the element.
@@ -227,6 +263,19 @@
           return this;
         }
         return this[0] ? (this[0].tjqData || {})[key] : null;
+      }
+
+      /**
+       * Removes previously stored data.
+       * @param {string} key 
+       */
+      removeData(key) {
+        this.each((elem) => {
+          elem.tjqData = elem.tjqData || {};
+          delete elem.tjqData[key];
+        });
+
+        return this;
       }
       
       /**
@@ -296,7 +345,7 @@
         this.each((elem, index) => {
           let $elem = $(elem);
           let once = $elem.data('tjqOnce') || [];
-          if(!~once.indexOf(identifier)) {
+          if(!once.includes(identifier)) {
             once.push(identifier);
             res.push(elem);
             $elem.data('tjqOnce', once);
@@ -350,13 +399,13 @@
       }
       
       /**
-       * HTMLElement.childNodes
+       * HTMLElement.children
        * @returns {TjQueryCollection}
        */
       children() {
         let res = [];
         this.each((elem) => {
-          res.push(elem.childNodes);
+          res.push(elem.children);
         });
         return $(res);
       }
@@ -402,7 +451,7 @@
       
     }
     
-    let tjqDocument = new TjQueryCollection([document]);
+    let $document = new TjQueryCollection([document]);
     return $;
     
     /**
@@ -416,7 +465,7 @@
       if (!c && selector instanceof TjQueryCollection) return selector;
     
       let selectors = (selector instanceof Array) ? selector : [selector];
-      let context = tjqDocument;
+      let context = $document;
       if (c) {
         if (!(c instanceof TjQueryCollection)) {
           context = $(c)
