@@ -30,6 +30,7 @@ Additionally, [jQuery Once](https://github.com/RobLoach/jquery-once) functionali
 - `.click()`
 - `.attr()`
 - `.removeAttr()`
+- `.prop()`
 - `.val()`
 - `.text()`
 - `.data()`

@@ -14,7 +14,8 @@
     class TjQueryCollection extends Array {
       
       /**
-       * 
+       * TjQueryCollection constructor.
+       * @constructor
        * @param {HTMLElement[]} items 
        */
       constructor(items) {
@@ -22,17 +23,12 @@
       }
 
       /**
-       * Loop through elements, return false on stop.
+       * Array.forEach()
        * @param {function} callback 
        * @returns {this}
        */
-      each (callback) {
-        let index = 0;
-        for (let elem of this) {
-          if (callback.call(this, elem, index++, this) === false) {
-            break;
-          }
-        }
+      each(callback) {
+        this.forEach(callback);
         return this;
       }
       
@@ -43,10 +39,8 @@
        */
       filter(callback) {
         let res = [];
-        let index = 0;
-        let self = this;
-        this.each((elem) => {
-          if(callback(elem, index++, self)) {
+        this.each((elem, index, self) => {
+          if(callback(elem, index, self)) {
             res.push(elem);
           }
         });
@@ -63,18 +57,13 @@
           return !!this.find(selector).length;
         }
         
-        let found = false;
         let sel = $(selector);
-        this.each((elem) => {
-          sel.each(function(test) {
-            return !(found = found || elem.contains(test));
-          });
-          if (found) {
-            return false;
-          }
-        });
 
-        return found;
+        return this.some((elem) => {
+          return sel.some((test) => {
+            return elem.contains(test);
+          });
+        });
       }
       
       /**
@@ -83,18 +72,16 @@
        * @returns {boolean}
        */
       is(selector) {
-        let all = true;
         if (typeof selector === "string") {
-          this.each((elem) => {
-            return all = all && elem.matches(selector);
+          return this.every((elem) => {
+            return elem.matches(selector);
           });
         } else {
           let test = $(selector);
-          this.each((elem) => {
-            return all = all && test.includes(elem);
+          return this.every((elem) => {
+            return test.includes(elem);
           });
         }
-        return all;
       }
       
       /**
@@ -105,7 +92,7 @@
       not(selector) {
         let sel = selector;
         if (typeof selector !== 'string') {
-          sel = $(selector)
+          sel = $(selector);
         }
         return $(this.filter((elem) => {
           return !$(elem).is(sel);
@@ -129,17 +116,16 @@
        * HTMLElement.addEventListener()
        * @param {string} type 
        * @param {function} callback 
-       * @param {object} options 
+       * @param {Object} [options] 
        * @returns {this}
        */
       on(type, callback, options) {
         let events = type.split(' ');
-        this.each((elem) => {
+        return this.each((elem) => {
           events.forEach(function (ev) {
             elem.addEventListener(ev, callback, options)
           });
         });
-        return this;
       };
       
       /**
@@ -150,12 +136,11 @@
        */
       off(type, callback) {
         let events = type.split(' ');
-        this.each((elem) => {
+        return this.each((elem) => {
           events.forEach(function (ev) {
-            elem.removeEventListener(type, callback);
+            elem.removeEventListener(ev, callback);
           });
         });
-        return this;
       }
       
       /**
@@ -164,17 +149,17 @@
        * @returns {this}
        */
       click(callback) {
-        if (!callback) {
-          this.each((elem) => {
+        if (typeof callback === 'undefined') {
+          return this.each((elem) => {
             elem.click();
           });
-          return this;
         }
-        this.on('click', callback);
-        this
-          .addClass('tjq-click')
+        
+        return this
+          .on('click', callback)
           .not('a[href], button, input, select, textarea')
           .once('tjqAllyClick')
+          .addClass('tjq-ally-click')
           .attr('tabindex', 0)
           .attr('role', 'button')
           .on('keydown', (e) => {
@@ -182,13 +167,12 @@
               e.currentTarget.click();
             }
           });
-        return this;
       }
       
       /**
        * HTMLElement.getAttribute()/setAttribute()
        * @param {string} key 
-       * @param {string|number} set 
+       * @param {string|number} [set]
        * @returns {this|string}
        */
       attr(key, set) {
@@ -213,45 +197,46 @@
 
         return this;
       }
-      
+
       /**
-       * HTMLElement.value
-       * @param {string|number|boolean} set 
-       * @returns {this|string}
+       * Set/get element property.
+       * @param {string} key 
+       * @param {*} [set] 
+       * @returns {this|*}
        */
-      val(set) {
-        if(typeof set !== 'undefined') {
+      prop(key, set) {
+        if (typeof set !== 'undefined') {
           this.each((elem) => {
-            if (elem.getAttribute('type') === 'checkbox') {
-              elem.value = !!set;
-            } else {
-              elem.value = set;
-            }
+            elem[key] = set;
           });
           return this;
         }
-        return this[0] ? this[0].value : null;
+
+        return this[0] ? this[0][key] : null;
+      }
+      
+      /**
+       * HTMLElement.value
+       * @param {string|number} [set] 
+       * @returns {this|string}
+       */
+      val(set) {
+        return this.prop('value', set);
       }
 
       /**
        * HTMLElement.textContent
-       * @param {string} set 
+       * @param {string} [set] 
+       * @returns {this|string}
        */
       text(set) {
-        if (typeof set !== 'undefined') {
-          this.each((elem) => {
-            elem.textContent = set;
-          });
-          return this;
-        }
-
-        return this[0] ? this[0].textContent : null;
+        return this.prop('textContent', set);
       }
       
       /**
        * Store/retrieve abitrary data on the element.
        * @param {string} key 
-       * @param {*} set 
+       * @param {*} [set] 
        * @returns {this|*}
        */
       data(key, set) {
@@ -312,6 +297,7 @@
       /**
        * HTMLElement.classList.toggle()
        * @param {string} name 
+       * @param {string} [force] 
        * @returns {this}
        */
       toggle(name, force) {
@@ -327,11 +313,9 @@
        * @returns {boolean}
        */
       hasClass(name) {
-        let all = true;
-        this.each((elem) => {
-          all = all && elem.classList.contains(name);
-        })
-        return all;
+        return this.every((elem) => {
+          return elem.classList.contains(name);
+        });
       }
       
       /**
@@ -342,16 +326,15 @@
       once(identifier) {
         identifier = typeof identifier === "undefined" ? "once" : identifier;
         let res = [];
-        this.each((elem, index) => {
+        this.each((elem, index, self) => {
           let $elem = $(elem);
           let once = $elem.data('tjqOnce') || [];
           if(!once.includes(identifier)) {
             once.push(identifier);
             res.push(elem);
             $elem.data('tjqOnce', once);
-            
             if(typeof identifier === 'function') {
-              identifier.call(elem, index);
+              identifier(elem, index, self);
             }
           }
         });
@@ -424,7 +407,7 @@
       
       /**
        * HTMLElement.parentNode recursive, filtered by selector.
-       * @param {string} selector
+       * @param {string} [selector]
        * @returns {TjQueryCollection}
        */
       parents(selector) {
@@ -446,7 +429,7 @@
        * @returns {TjQueryCollection}
        */
       closest(selector) {
-        return $(this.parents(selector)[0]);
+        return this.parents(selector).first();
       }
       
     }
@@ -463,40 +446,37 @@
     function $(selector, c) {
       if (!selector) return new TjQueryCollection([]);
       if (!c && selector instanceof TjQueryCollection) return selector;
+      if (!c && selector === document) return new TjQueryCollection([document]);
     
       let selectors = (selector instanceof Array) ? selector : [selector];
       let context = $document;
       if (c) {
-        if (!(c instanceof TjQueryCollection)) {
-          context = $(c)
-        } else {
+        if (c instanceof TjQueryCollection) {
           context = c;
+        } else {
+          context = $(c)
         }
       }
     
       let elems = [];
     
-      for (let i = 0; i < selectors.length; i++) {
-        if (selectors[i] instanceof TjQueryCollection) {
-          for (let j in selectors[i]) {
-            elems.push(selectors[i][j]);
-          }
-        } else if (selectors[i] instanceof HTMLElement) {
-          elems.push(selectors[i])
-        }  else if (selectors[i] instanceof NodeList) {
-          for (let j = 0; j < selectors[i].length; j++) {
-            if (selectors[i][j] instanceof HTMLElement) {
-              elems.push(selectors[i][j]);
+      for (let sel of selectors) {
+        if (sel instanceof TjQueryCollection) {
+          elems = elems.concat(sel);
+        } else if (sel instanceof HTMLElement) {
+          elems.push(sel)
+        }  else if (sel instanceof NodeList) {
+          for (let elem of Array.from(sel)) {
+            if (elem instanceof HTMLElement) {
+              elems.push(elem);
             }
           }
-        } else if (typeof selectors[i] === 'string') {
-          context.find(selectors[i]).each((elem) => {
-            elems.push(elem);
-          });
+        } else if (typeof sel === 'string') {
+          elems = elems.concat(context.find(sel));
         }
       }
     
-      // Filter unique and sort by appearance
+      // Filter unique, within context, and sort by appearance
       elems = elems.filter((value, index, self) => {
         return self.indexOf(value) === index && (!c || context.contains(value));
       }).sort((a, b) => {
