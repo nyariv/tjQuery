@@ -1,0 +1,39 @@
+* {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+body {
+  padding: 20px;
+}
+
+.container {
+  display: flex;
+}
+
+p, table {
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  box-sizing: border-box;
+  margin: 0;
+  margin-right: 20px;
+  font-size: 14px;
+}
+
+p {
+  width: 400px;
+}
+
+table {
+  width: 700px;
+}
+
+td, th {
+  text-align: left;
+  padding: 5px;
+  border-bottom: 1px dotted #ddd;
+}
+
+td:first-child, tr:last-child {
+  font-weight: bold;
+}

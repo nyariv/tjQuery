@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Document</title>
+  <script
+  src="https://code.jquery.com/jquery-3.3.1.min.js"
+  integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
+  crossorigin="anonymous"></script>
+  <script src="../js/tjQuery.js"></script>
+  <link rel="stylesheet" href="bstyle.css">
+
+  <script>
+    var $jqDivs = {};
+    var $tjqDivs = {};
+    let methods = [
+      "$divs = $('div')",
+      "$('span', $divs)",
+      "$divs.add('span')",
+      "$divs.each((e) => 1)",
+      // "$divs.map((e) => 1)",
+      "$divs.is('span')",
+      // "$divs.contains('span')",
+      "$divs.not('span')",
+      "$divs.filter('span')",
+      "$divs.find('span')",
+      "$divs.on('touchstart', (e) => 1)",
+      "$divs.off('touchstart', (e) => 1)",
+      "$divs.click((e) => 1)",
+      "$divs.attr('data-t', '1')",
+      "$divs.attr('data-t')",
+      "$divs.prop('t', '1')",
+      "$divs.prop('t')",
+      "$divs.data('t', '1')",
+      "$divs.data('t')",
+      "$divs.focus()",
+      "$divs.toggleClass('t')",
+      "$divs.hasClass('t')",
+      "$divs.first()",
+      "$divs.last()",
+      "$divs.next('span')",
+      "$divs.prev('span')",
+      "$divs.siblings('span')",
+      "$divs.children('span')",
+      "$divs.parent('span')",
+      "$divs.parents('span')",
+      "$divs.closest('span')",
+    ];
+    
+    let dummyContent = (level, children, div) => {
+      div = div || document.createElement('div');
+      if(level <= 0) return div;
+      level--;
+      for(let i = 0; i < children; i++) {
+        div.appendChild(dummyContent(level, children, document.createElement(i % 2 ? 'div' : 'span')));
+      }
+      return div;
+    };
+    setTimeout(() => {
+      document.getElementById('dummy').appendChild(dummyContent(5, 6));
+
+      let methodNum = 0;
+      let jqTotal = 0;
+      let tjqTotal = 0;
+      let validCount = 0;
+      let improvementTotal = 0;
+      function run() {
+        let method = methods[methodNum++];
+        let tr = document.createElement('tr');
+        if (!method)  {
+          let td = document.createElement('td');
+          td.textContent = "Average";
+          tr.appendChild(td);
+
+          td = document.createElement('td');
+          tr.appendChild(td);
+
+          td = document.createElement('td');
+          tr.appendChild(td);
+
+          td = document.createElement('td');
+          td.textContent = "x" + Math.round(improvementTotal/validCount*10)/10;
+          tr.appendChild(td);
+
+          td = document.createElement('td');
+          tr.appendChild(td);
+
+          document.getElementById('results').appendChild(tr);
+          return;
+        }
+
+        let jqfunc = Function('$divsa', '$', 'let $divs = $divsa.a; $divsa.b = ' + method + '; $divsa.a = $divs;');
+        let tjqfunc = Function('$divsa', '$', 'let $divs = $divsa.a; $divsa.b = ' + method + '; $divsa.a = $divs;');
+
+        let start;
+
+        start = Math.round(performance.now()*100);
+        for(let i = 0; i < 1; i++) {
+          jqfunc($jqDivs, jQuery);
+        }
+        let jqTime = Math.round(performance.now()*100) - start;
+        jqTotal += jqTime;
+
+        start = Math.round(performance.now()*100);
+        for(let i = 0; i < 1; i++) {
+          tjqfunc($tjqDivs, tjQuery);
+        }
+        let tjqTime = Math.round(performance.now()*100) - start;
+        tjqTotal += tjqTime;
+
+        let pass = $tjqDivs.b === $jqDivs.b;
+        if ($tjqDivs.b instanceof Array) {
+          pass = $tjqDivs.b.length === $jqDivs.b.length;
+          pass = pass && $tjqDivs.b.every((elem) => $jqDivs.b.is(elem));
+          // $jqDivs.b.each((i, elem) => $tjqDivs.b.is(elem) || console.log(elem));
+          // pass = $tjqDivs.b.length + " " + $jqDivs.b.length;
+        }
+
+        validCount += tjqTime > 20 ? 1 : 0;
+        improvementTotal += tjqTime > 20 ? (jqTime/tjqTime) : 0;
+
+        let td = document.createElement('td');
+        td.textContent = method;
+        tr.appendChild(td);
+
+        td = document.createElement('td');
+        td.textContent = Math.round(jqTime)/100 + "ms";
+        tr.appendChild(td);
+
+        td = document.createElement('td');
+        td.textContent = Math.round(tjqTime)/100 + "ms";
+        tr.appendChild(td);
+
+        td = document.createElement('td');
+        td.textContent = "x" + Math.round(jqTime/tjqTime*10)/10;
+        tr.appendChild(td);
+
+        td = document.createElement('td');
+        td.textContent = pass ? "PASS" : "FAIL";
+        // td.textContent = pass;
+        tr.appendChild(td);
+
+        document.getElementById('results').appendChild(tr);
+
+        document.getElementById('percent').textContent = Math.round((methodNum) / methods.length * 100) + "%";
+
+        setTimeout(run, 50);
+      }
+
+      run();
+    });
+
+  </script>
+
+</head>
+<body>
+  <h1>jQuery - tjQuery Benchmarks <span id="percent"></span></h1>
+
+  <span class="container">
+      <p class="intro">
+        Here are the benchmarks comparing tjQuery to jQuery (3.3.1) for the supported 
+        methods. Tests are run on a series of alternating divs and spans with 5 nesting 
+        levels with 6 children each (6^5 divs and spans).
+      </p>
+    
+      <table>
+        <thead><tr><th>Code</th><th>jQuery Time</th><th>tjQuery Time</th><th>Improvement</th><th>Test</th></tr></thead>
+        <tbody id="results">
+    
+        </tbody>
+      </table>
+  </span>
+
+  <div id="dummy" style="display: none"></div>
+</body>
+</html>
