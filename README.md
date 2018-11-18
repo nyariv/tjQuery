@@ -21,8 +21,8 @@ Additionally, [jQuery Once](https://github.com/RobLoach/jquery-once) functionali
 ## Supported methods
 - All of `Array()`'s methods
 - `.each()`
+- `.add()`
 - `.is()`
-- `.contains()`
 - `.not()`
 - `.find()`
 - `.on()`
@@ -38,13 +38,14 @@ Additionally, [jQuery Once](https://github.com/RobLoach/jquery-once) functionali
 - `.focus()`
 - `.addClass()`
 - `.removeClass()`
-- `.toggle()`
+- `.toggleClass()`
 - `.hasClass()`
 - `.once()`
 - `.first()`
 - `.last()`
 - `.next()`
 - `.prev()`
+- `.siblings()`
 - `.children()`
 - `.parent()`
 - `.parents()`
