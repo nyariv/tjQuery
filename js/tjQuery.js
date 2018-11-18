@@ -352,87 +352,78 @@
        * @returns {TjQueryCollection}
        */
       last() {
-        return $(this[this.length-1]);
+        return this.slice(-1);
       }
 
       /**
-       * HTMLElement.nextSibling
+       * Element.nextSibling
+       * @param {string} [selector]
        * @returns {TjQueryCollection}
        */
-      next() {
-        let res = [];
-        this.each((elem) => {
-          res.push(elem.nextSibling);
-        });
-        return $(res);
+      next(selector) {
+        return $(propElem(this, 'nextSibling', selector || "*"));
       }
 
       /**
-       * HTMLElement.previousSibling
+       * Element.previousSibling
+       * @param {string} [selector]
        * @returns {TjQueryCollection}
        */
-      prev() {
-        let res = [];
-        this.each((elem) => {
-          res.push(elem.previousSibling);
-        });
-        return $(res);
+      prev(selector) {
+        return $(propElem(this, 'previousSibling', selector || "*"));
+      }
+
+      /**
+       * Get all sibling elements.
+       * @param {string} [selector]
+       * @returns {TjQueryCollection}
+       */
+      siblings(selector) {
+        return $(propElem(this, 'previousSibling', selector, true)
+                  .concat(propElem(this, 'nextSibling', selector, true)));
       }
       
       /**
-       * HTMLElement.children
+       * Element.children
+       * @param {string} [selector]
        * @returns {TjQueryCollection}
        */
-      children() {
-        let res = [];
-        this.each((elem) => {
-          res.push(elem.children);
-        });
-        return $(res);
+      children(selector) {
+        let res = $(this.map((elem) => elem.children));
+        return selector ? res.filter(selector) : res;
       }
       
       /**
-       * HTMLElement.parentNode
+       * Element.parentNode
+       * @param {string} [selector]
        * @returns {TjQueryCollection}
        */
-      parent() {
-        let res = [];
-        this.each((elem) => {
-          res.push(elem.parentNode);
-        })
-        return $(res);
+      parent(selector) {
+        let res = $(this.map((elem) => elem.parentNode));
+        return selector ? res.filter(selector) : res;
       }
       
       /**
-       * HTMLElement.parentNode recursive, filtered by selector.
+       * Element.parentNode recursive, filtered by selector.
        * @param {string} [selector]
        * @returns {TjQueryCollection}
        */
       parents(selector) {
-        let res = [];
-        this.each((elem) => {
-          let found = elem;
-          while(found = found.parentNode) {
-            if (!selector || found.matches(selector)) {
-              res.push(found);
-            }
-          }
-        });
-        return $(res);
+        return $(propElem(this, 'parentNode', selector, true));
       }
       
       /**
-       * HTMLElement.parentNode recursive, limit to one that matches selector.
+       * Element.parentNode recursive, limit to one that matches selector.
        * @param {string} selector
        * @returns {TjQueryCollection}
        */
-      closest(selector) {
-        return this.parents(selector).first();
+      closest(selector) {  
+        return $(this.map((elem) => elem.closest(selector)));
       }
       
     }
     
-    let $document = new TjQueryCollection([document]);
+    let $document = new TjQueryCollection(document);
     return $;
     
     /**
@@ -442,50 +433,83 @@
      * @returns {TjQueryCollection}
      */
     function $(selector, c) {
-      if (!selector) return new TjQueryCollection([]);
+      if (!selector) return new TjQueryCollection();
       if (!c && selector instanceof TjQueryCollection) return selector;
-      if (!c && selector === document) return new TjQueryCollection([document]);
+      if (!c && selector === document) return new TjQueryCollection(document);
     
       let selectors = (selector instanceof Array) ? selector : [selector];
-      let context = $document;
-      if (c) {
-        if (c instanceof TjQueryCollection) {
-          context = c;
-        } else {
-          context = $(c)
-        }
-      }
-    
-      let elems = [];
+      let context = c ? $(c) : $document;
+      let elems = new Set();
     
       for (let sel of selectors) {
         if (sel instanceof TjQueryCollection) {
-          elems = elems.concat(sel);
-        } else if (sel instanceof HTMLElement) {
-          elems.push(sel)
+          sel.forEach((elem) => elems.add(elem));
+        } else if (sel instanceof Element) {
+          elems.add(sel)
         }  else if (sel instanceof NodeList) {
-          for (let elem of Array.from(sel)) {
-            if (elem instanceof HTMLElement) {
-              elems.push(elem);
+          sel.forEach((elem) => {
+            if (elem instanceof Element) {
+              elems.add(elem);
             }
+          });
+        } else if (sel instanceof HTMLCollection) {
+          if (!c && selectors.length === 1) {
+            return TjQueryCollection.from(sel);
           }
+          Array.from(sel).forEach((elem) => {
+            elems.add(elem);
+          });
         } else if (typeof sel === 'string') {
-          elems = elems.concat(context.find(sel));
+          if (!c && selectors.length === 1) {
+            return TjQueryCollection.from(document.querySelectorAll(sel));
+          }
+          context.find(selector).forEach((elem) => elems.add(elem));
         }
       }
+
+      elems = TjQueryCollection.from(elems);
     
       // Filter unique, within context, and sort by appearance
-      elems = elems.filter((value, index, self) => {
-        return self.indexOf(value) === index && (!c || context.contains(value));
-      }).sort((a, b) => {
-        if( a === b) return 0;
-        if( a.compareDocumentPosition(b) & 2) {
-            // b comes before a
-            return 1;
+      if (c) {
+        elems = elems.filter((elem) => {
+          return context.some((cont) => cont.contains(elem));
+        });
+      }
+
+      if (selectors.length > 1) {
+        elems = elems.sort((a, b) => {
+          if( a === b) return 0;
+          if( a.compareDocumentPosition(b) & 2) {
+              // b comes before a
+              return 1;
+          }
+          return -1;
+        });
+      }
+
+      return elems;
+    }
+
+    /**
+     * Get element from another element's property recursively, filtered by selector.
+     * @param {TjQueryCollection} collection 
+     * @param {string} prop 
+     * @param {string} [selector] 
+     * @param {boolean} [multiple] 
+     */
+    function propElem(collection, prop, selector, multiple) {
+      let res = [];
+      collection.each((elem) => {
+        let found = false;
+        let next = elem;
+        while ((!found || multiple) && (next = next[prop])) {
+          if (next instanceof Element && (!selector || next.matches(selector))) {
+            res.push(next);
+            found = true;
+          }
         }
-        return -1;
       });
-    
-      return new TjQueryCollection(elems);
+
+      return res;
     }
   })();
