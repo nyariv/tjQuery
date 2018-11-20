@@ -79,7 +79,7 @@
       }
 
       /**
-       * Filter elements that match selector. 
+       * Filter elements that match selector, or Array.filter() if selector is a function.
        * @param {*} selector
        * @returns {TjQueryCollection}
        */
@@ -270,7 +270,7 @@
        * @returns {this}
        */
       focus() {
-        if (this[0] && this[0].focus) {
+        if (this[0] && typeof this[0].focus === 'function') {
           this[0].focus();
         }
 
@@ -279,7 +279,7 @@
       
       /**
        * Element.classList.add()
-       * @param {string} name 
+       * @param {string|string[]} name 
        * @returns {this}
        */
       addClass(name) {
@@ -288,7 +288,7 @@
       
       /**
        * Element.classList.remove()
-       * @param {string} name 
+       * @param {string|string[]} name 
        * @returns {this}
        */
       removeClass(name) {
@@ -297,21 +297,38 @@
       
       /**
        * Element.classList.toggle()
-       * @param {string} name 
-       * @param {string} [force] 
+       * @param {string|string[]} [name] 
+       * @param {boolean} [force] 
        * @returns {this}
        */
       toggleClass(name, force) {
-        return this.each((elem) => elem.classList.toggle(name, force));
+        let nameArr = name instanceof Array ? name : [name];
+        this.each((elem) => {
+          let $elem = $(elem);
+          let toggleable = $elem.data('___classes___') || new Set();
+          if (!name) {
+            toggleable.forEach((className) => {
+              elem.classList.toggle(className, force)
+            });
+            return;
+          }
+          nameArr.forEach((className) => {
+            toggleable.add(className);
+            elem.classList.toggle(className, force);
+          });
+          $elem.data('___classes___', toggleable);
+        });
+        return this;
       }
 
       /**
        * Element.classList.contains()
-       * @param {string} name 
+       * @param {string|string[]} name 
        * @returns {boolean}
        */
       hasClass(name) {
-        return this.some((elem) => elem.classList.contains(name));
+        name = name instanceof Array ? name : [name];
+        return this.some((elem) => name.every((className) => elem.classList.contains(className)));
       }
       
       /**
@@ -361,7 +378,7 @@
        * @returns {TjQueryCollection}
        */
       next(selector) {
-        return $(propElem(this, 'nextSibling', selector || "*"));
+        return $(propElem(this, 'nextSibling', selector));
       }
 
       /**
@@ -370,7 +387,7 @@
        * @returns {TjQueryCollection}
        */
       prev(selector) {
-        return $(propElem(this, 'previousSibling', selector || "*"));
+        return $(propElem(this, 'previousSibling', selector));
       }
 
       /**
@@ -389,8 +406,7 @@
        * @returns {TjQueryCollection}
        */
       children(selector) {
-        let res = $(this.map((elem) => elem.children));
-        return selector ? res.filter(selector) : res;
+        return $(propElem($(this.map((elem) => elem.firstChild)), 'nextSibling', selector, true, true));
       }
       
       /**
@@ -497,17 +513,20 @@
      * @param {string} [selector] 
      * @param {boolean} [multiple] 
      */
-    function propElem(collection, prop, selector, multiple) {
+    function propElem(collection, prop, selector, multiple, includeFirst) {
       let res = [];
-      collection.each((elem) => {
+      collection.forEach((elem) => {
         let found = false;
-        let next = elem;
-        while ((!found || multiple) && (next = next[prop])) {
+        let next = elem[prop];
+        if (includeFirst) {
+          next = elem;
+        }
+        do {
           if (next instanceof Element && (!selector || next.matches(selector))) {
             res.push(next);
             found = true;
           }
-        }
+        } while ((!found || multiple) && next && (next = next[prop]))
       });
 
       return res;
