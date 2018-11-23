@@ -77,6 +77,19 @@
         let sel = $(selector);
         return this.filter((elem) => !sel.includes(elem));
       }
+      
+      /**
+       * Filter by Element.contains().
+       * @param {*} selector
+       * @returns {TjQueryCollection}
+       */
+      has(selector) {
+        if (typeof selector === 'string') {
+          return this.filter((elem) => elem.querySelectorAll(selector).length);
+        }
+        let sel = $(selector);
+        return this.filter((elem) => sel.some((test) => elem !== test && elem.contains(test)));
+      }
 
       /**
        * Filter elements that match selector, or Array.filter() if selector is a function.
@@ -162,7 +175,52 @@
               elem.removeEventListener(k, handler);
             })
           });
-        });
+        })) {
+          let evs = [];
+          if (typeof events === 'string') {
+            evs = events.split(' ');
+          }
+          this.each((elem) => {
+            let handlers = $(elem).data('___events___') || {};
+            if (typeof events === 'undefined') {
+              evs = Object.keys(handlers)
+            }
+            evs.forEach((ev) => {
+              (handlers || []).forEach((handler) => {
+                elem.removeEventListener(ev, handler);
+              });
+              delete handlers[ev];
+            });
+          });
+        }
+        return this;
+      }
+
+      /**
+       * Element.addEventListener()
+       * @param {string} type 
+       * @param {function} callback 
+       * @param {Object} [options] addEventListener options.
+       * @returns {this}
+       */
+      one(events, callback, options) {
+        options = options || {};
+        options.once = true;
+        return this.on(events, callback, options);
+      };
+
+      /**
+       * document.addEventListener('DOMContentLoaded')
+       * @param {function} callback 
+       * @returns {this}
+       */
+      ready(callback) {
+        if (document.readyState === 'complete') {
+          callback();
+        } else {
+          $document.one('DOMContentLoaded', callback);
+        }
+        return this;
       }
       
       /**
@@ -257,6 +315,46 @@
       text(set) {
         return this.prop('textContent', set);
       }
+
+      /**
+       * Element.scrollTop
+       * @param {number} [set] 
+       * @returns {this|number}
+       */
+      scrollTop(set) {
+        return this.prop('scrollTop', set);
+      }
+
+      /**
+       * Element.scrollLeft
+       * @param {number} [set] 
+       * @returns {this|number}
+       */
+      scrollLeft(set) {
+        return this.prop('scrollLeft', set);
+      }
+
+      /**
+       * Get the label of the first element, as read by screen readers.
+       * @param {string} [set]
+       * @returns string
+       */
+      label(set) {
+        if (typeof set === 'string') {
+          this.attr('aria-label', set);
+          return this;
+        }
+        
+        if (!this.get(0)) return null;
+
+        let get = (test) => test && test.length && test;
+        return get(this.attr('aria-label')) || 
+               get(get(this.attr('aria-labelledby')) && $('#' + this.attr('aria-labelledby')).label()) || 
+               get(get(this.attr('id')) && $('label[for="'+ this.attr('id') + '"]').label()) ||
+               get(this.attr('title')) || 
+               get(this.attr('alt')) || 
+               (this.text() || "").trim();
+      }
       
       /**
        * Store/retrieve abitrary data on the element.
@@ -290,11 +388,31 @@
       
       /**
        * Element.focus()
+       * @param {function} [callback] 
+       * @param {Object} [options] addEventListener options.
        * @returns {this}
        */
-      focus() {
-        if (this[0] && typeof this[0].focus === 'function') {
+      focus(callback, options) {
+        if (typeof callback === 'undefined' && this[0] && typeof this[0].focus === 'function') {
           this[0].focus();
+        } else if (typeof callback !== 'undefined') {
+          this.on('focus', callback, options);
+        }
+
+        return this;
+      }
+      
+      /**
+       * Element.focus()
+       * @param {function} [callback] 
+       * @param {Object} [options] addEventListener options.
+       * @returns {this}
+       */
+      blur(callback, options) {
+        if (typeof callback === 'undefined' && this[0] && typeof this[0].blur === 'function') {
+          this[0].blur();
+        } else if (typeof callback !== 'undefined') {
+          this.on('blur', callback, options);
         }
 
         return this;
@@ -370,6 +488,34 @@
       }
 
       /**
+       * Get element.
+       * @param {number} index
+       * @returns {Element}
+       */
+      get(index) {
+        return this[index];
+      }
+
+      /**
+       * Get index of matching selector within current elements.
+       * @param {*} [selector] 
+       * @returns {number}
+       */
+      index(selector) {
+        let ind = 0;
+        if (typeof selector === 'undefined') {
+          return this.first().parent().children().indexOf(this.get(0));
+        } else if (typeof selector === 'string') {
+          this.some((elem) => elem.matches(selector) || (ind++ && false));
+        } else {
+          let sel = $(selector);
+          this.some((elem) => sel.includes(elem) || (ind++ && false));
+        }
+
+        return ind >= this.length ? -1 : ind;
+      }
+
+      /**
        * Get first element.
        * @returns {TjQueryCollection}
        */
@@ -383,6 +529,15 @@
        */
       last() {
         return this.slice(-1);
+      }
+
+      /**
+       * Get element.
+       * @param {number} index
+       * @returns {TjQueryCollection}
+       */
+      eq(index) {
+        return this.slice(index, 1);
       }
 
       /**
