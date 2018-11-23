@@ -66,7 +66,7 @@
       }
       
       /**
-       * !Element.matches() 
+       * Filter by !Element.matches().
        * @param {*} selector
        * @returns {TjQueryCollection}
        */
@@ -111,30 +111,56 @@
       /**
        * Element.addEventListener()
        * @param {string} type 
+       * @param {string} [selector] delegate selector 
        * @param {function} callback 
        * @param {Object} [options] addEventListener options.
        * @returns {this}
        */
-      on(type, callback, options) {
-        let events = type.split(' ');
-        return this.each((elem) => {
-          events.forEach((ev) => {
-            elem.addEventListener(ev, callback, options);
+      on(events, selector, callback, options) {
+        if (typeof selector === 'string') {
+          let originalCallback = callback;
+          callback = (e) => {
+            if (e.target.matches(selector)) {
+              originalCallback(e);
+            }
+          };
+          callback.originalCallback = originalCallback;
+          originalCallback.tjqHanlers = originalCallback.tjqHanlers || [];
+          originalCallback.tjqHandlers.push(callback);
+        } else {
+          options = callback;
+          callback = selector;
+        }
+        objectOrProp(events, callback, (k, v) => {
+          this.each((elem) => {
+            let $elem = $(elem);
+            let events = $elem.data('___events___') || {};
+            if (!events[k]) {
+              events[k] = new Set()
+              $elem.data('___events___', events);
+            }
+            events[k].add(v);
+            elem.addEventListener(k, v, options);
           });
         });
+
+        return this;
       };
       
       /**
        * Element.removeEventListener()
-       * @param {string} type 
+       * @param {string} events 
        * @param {function} callback 
        * @returns {this}
        */
-      off(type, callback) {
-        let events = type.split(' ');
-        return this.each((elem) => {
-          events.forEach((ev) => {
-            elem.removeEventListener(ev, callback);
+      off(events, callback) {
+        if(!objectOrProp(events, callback, (k, v) => {
+          let handlers = callback.tjqHandlers || [];
+          handlers.push(v);
+          this.each((elem) => {
+            handlers.forEach((handler) => {
+              elem.removeEventListener(k, handler);
+            })
           });
         });
       }
@@ -177,12 +203,11 @@
        * @returns {this|string}
        */
       attr(key, set) {
-        if(typeof set !== 'undefined') {
+        if(objectOrProp(key, set, (k, v) => {
           this.each((elem) => {
-            elem.setAttribute(key, set);
+            elem.setAttribute(k, v);
           });
-          return this;
-        }
+        })) return this;
         
         return this[0] ? this[0].getAttribute(key) : null;
       }
@@ -206,12 +231,11 @@
        * @returns {this|*}
        */
       prop(key, set) {
-        if (typeof set !== 'undefined') {
+        if(objectOrProp(key, set, (k, v) => {
           this.each((elem) => {
-            elem[key] = set;
+              elem[k] = v;
           });
-          return this;
-        }
+        })) return this;
 
         return this[0] ? this[0][key] : null;
       }
@@ -236,18 +260,17 @@
       
       /**
        * Store/retrieve abitrary data on the element.
-       * @param {string} key 
+       * @param {string|object} key 
        * @param {*} [set] 
        * @returns {this|*}
        */
       data(key, set) {
-        if(typeof set !== 'undefined') {
+        if(objectOrProp(key, set, (k, v) => {
           this.each((elem) => {
             elem.tjqData = elem.tjqData || {};
-            elem.tjqData[key] = set;
+            elem.tjqData[k] = v;
           });
-          return this;
-        }
+        })) return this;
 
         return this[0] ? (this[0].tjqData || {})[key] : null;
       }
@@ -279,7 +302,7 @@
       
       /**
        * Element.classList.add()
-       * @param {string|string[]} name 
+       * @param {string} name 
        * @returns {this}
        */
       addClass(name) {
@@ -288,7 +311,7 @@
       
       /**
        * Element.classList.remove()
-       * @param {string|string[]} name 
+       * @param {string} name 
        * @returns {this}
        */
       removeClass(name) {
@@ -297,26 +320,16 @@
       
       /**
        * Element.classList.toggle()
-       * @param {string|string[]} [name] 
+       * @param {string} [name] 
        * @param {boolean} [force] 
        * @returns {this}
        */
       toggleClass(name, force) {
-        let nameArr = name instanceof Array ? name : [name];
+        let nameArr = name.split(' ');
         this.each((elem) => {
-          let $elem = $(elem);
-          let toggleable = $elem.data('___classes___') || new Set();
-          if (!name) {
-            toggleable.forEach((className) => {
-              elem.classList.toggle(className, force)
-            });
-            return;
-          }
           nameArr.forEach((className) => {
-            toggleable.add(className);
             elem.classList.toggle(className, force);
           });
-          $elem.data('___classes___', toggleable);
         });
         return this;
       }
@@ -544,9 +557,10 @@
 
     /**
      * Helper function for excuting by name/value or multiple object key/value pairs.
-     * @param {string|object} name 
+     * @param {string|object} name the string may also be space separated for multi value.
      * @param {*} set 
      * @param {function} each 
+     * @returns {boolean} whether a key/value pair was provided.
      */
     function objectOrProp(name, set, each) {
       let res = {};
@@ -566,8 +580,8 @@
 
     /**
      * Faster Array.from().
-     * @param {*} object 
-     * @param {contructor} Class 
+     * @param {object} object 
+     * @param {contructor} [Class] defaults to TjQueryCollection
      */
     function from(object, Class) {
       Class = typeof Class === 'undefined' ? TjQueryCollection : Class;
@@ -584,3 +598,4 @@
       return Class.from(object);
     }
   })();
+  
