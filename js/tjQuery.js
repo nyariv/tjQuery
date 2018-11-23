@@ -28,7 +28,7 @@
        * @returns {Array}
        */
       map(callback) {
-        return Array.from(this).map(callback, this);
+        return from(this, Array).map(callback, this);
       }
 
       /**
@@ -48,7 +48,7 @@
        * @returns {TjQueryCollection}
        */
       add(selector, context) {
-        return $(Array.from(this).concat($(selector, context)));
+        return $([this, $(selector, context)]);
       }
       
       /**
@@ -85,7 +85,7 @@
        */
       filter(selector) {
         if (typeof selector === 'function') {
-          return TjQueryCollection.from(Array.from(this).filter(selector, this));
+          return from(Array.prototype.filter.call(this, selector));
         }
         if (typeof selector === 'string') {
           return this.filter((elem) => elem.matches(selector));
@@ -101,7 +101,7 @@
        */
       find(selector) {
         if (typeof selector === 'function') {
-          return $(Array.from(this).find(selector, this));
+          return $(from(this, Array).find(selector, this));
         } else if (typeof selector === 'string') {
           return $(this.map((elem) => elem.querySelectorAll(selector)));
         }
@@ -378,7 +378,7 @@
        * @returns {TjQueryCollection}
        */
       next(selector) {
-        return $(propElem(this, 'nextSibling', selector));
+        return from(propElem(this, 'nextElementSibling', selector));
       }
 
       /**
@@ -387,7 +387,7 @@
        * @returns {TjQueryCollection}
        */
       prev(selector) {
-        return $(propElem(this, 'previousSibling', selector));
+        return from(propElem(this, 'previousElementSibling', selector));
       }
 
       /**
@@ -396,8 +396,8 @@
        * @returns {TjQueryCollection}
        */
       siblings(selector) {
-        return $(propElem(this, 'previousSibling', selector, true)
-                  .concat(propElem(this, 'nextSibling', selector, true)));
+        return $(propElem(this, 'previousElementSibling', selector, true)
+                  .concat(propElem(this, 'nextElementSibling', selector, true)));
       }
       
       /**
@@ -406,7 +406,7 @@
        * @returns {TjQueryCollection}
        */
       children(selector) {
-        return $(propElem($(this.map((elem) => elem.firstChild)), 'nextSibling', selector, true, true));
+        return $(propElem(this.map((elem) => elem.firstChild), 'nextElementSibling', selector, true, true));
       }
       
       /**
@@ -452,15 +452,22 @@
       if (!selector) return new TjQueryCollection();
       if (!c && selector instanceof TjQueryCollection) return selector;
       if (!c && selector === document) return new TjQueryCollection(document);
-    
-      let selectors = (selector instanceof Array) ? selector : [selector];
+      
+      selector = (typeof selector === 'object' && selector.length) ? from(selector, Array) : selector;
+      let selectors = selector instanceof Array ? selector : [selector];
       let context = c ? $(c) : $document;
       let elems = new Set();
     
       for (let sel of selectors) {
         if (sel instanceof TjQueryCollection) {
+          if (!c && selectors.length === 1) {
+            return sel;
+          }
           sel.forEach((elem) => elems.add(elem));
         } else if (sel instanceof Element) {
+          if (!c && selectors.length === 1) {
+            return new TjQueryCollection(sel);
+          }
           elems.add(sel)
         }  else if (sel instanceof NodeList) {
           sel.forEach((elem) => {
@@ -470,28 +477,30 @@
           });
         } else if (sel instanceof HTMLCollection) {
           if (!c && selectors.length === 1) {
-            return TjQueryCollection.from(sel);
+            return from(sel);
           }
-          Array.from(sel).forEach((elem) => {
+          sel.forEach((elem) => {
             elems.add(elem);
           });
         } else if (typeof sel === 'string') {
           if (!c && selectors.length === 1) {
-            return TjQueryCollection.from(document.querySelectorAll(sel));
+            return from(document.querySelectorAll(sel));
           }
-          context.find(selector).forEach((elem) => elems.add(elem));
+          context.each((cElem) => {
+            cElem.querySelectorAll(sel).forEach((elem) => elems.add(elem));
+          });
         }
       }
-
-      elems = TjQueryCollection.from(elems);
+      elems = from(elems);
     
-      // Filter unique, within context, and sort by appearance
+      // Filter within context
       if (c) {
         elems = elems.filter((elem) => {
-          return context.some((cont) => cont.contains(elem));
+          return context.some((cont) => cont !== elem && cont.contains(elem));
         });
       }
 
+      // Sort by apppearance
       if (selectors.length > 1) {
         elems = elems.sort((a, b) => {
           if( a === b) return 0;
@@ -514,8 +523,9 @@
      * @param {boolean} [multiple] 
      */
     function propElem(collection, prop, selector, multiple, includeFirst) {
-      let res = [];
+      let res = new Set();
       collection.forEach((elem) => {
+        if (!elem) return;
         let found = false;
         let next = elem[prop];
         if (includeFirst) {
@@ -523,12 +533,54 @@
         }
         do {
           if (next instanceof Element && (!selector || next.matches(selector))) {
-            res.push(next);
+            res.add(next);
             found = true;
           }
         } while ((!found || multiple) && next && (next = next[prop]))
       });
 
-      return res;
+      return from(res, Array);
+    }
+
+    /**
+     * Helper function for excuting by name/value or multiple object key/value pairs.
+     * @param {string|object} name 
+     * @param {*} set 
+     * @param {function} each 
+     */
+    function objectOrProp(name, set, each) {
+      let res = {};
+      let wasSet = false;
+      if (typeof name === 'string' && typeof set !== 'undefined') {
+        wasSet = true;
+        name.split(' ').forEach((n) => res[n] = set);
+      } else if (typeof name === 'object') {
+        wasSet = true;
+        res = name;
+      }
+      for (let i in res) {
+        each(i, res[i]);
+      }
+      return wasSet;
+    }
+
+    /**
+     * Faster Array.from().
+     * @param {*} object 
+     * @param {contructor} Class 
+     */
+    function from(object, Class) {
+      Class = typeof Class === 'undefined' ? TjQueryCollection : Class;
+      if (typeof object !== 'object' || !object) return new Class(); 
+      if (object.isPrototypeOf(Class)) return object;
+      if (object.length) {
+        let i;
+        let arr = new Class(object.length);
+        for (i = 0; i < object.length; i++) {
+          arr[i] = object[i];
+        }
+        return arr;
+      }
+      return Class.from(object);
     }
   })();
