@@ -4,42 +4,50 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="ie=edge">
-  <title>Document</title>
+  <title>tjQuery Benchmarks</title>
   <script
   src="https://code.jquery.com/jquery-3.3.1.min.js"
   integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
   crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/zepto/1.2.0/zepto.js"></script>
   <script src="js/tjQuery.js"></script>
   <link rel="stylesheet" href="css/style.css">
 
   <script>
     var $jqDivs = {};
     var $tjqDivs = {};
+    var $zDivs = {};
     let methods = [
       "$divs = $('div')",
       "$('span', $divs)",
       "$divs.add('span')",
       "$divs.each((e) => 1)",
-      // "$divs.map((e) => 1)",
       "$divs.is('span')",
-      // "$divs.contains('span')",
       "$divs.not('span')",
+      "$divs.has('span')",
       "$divs.filter('span')",
       "$divs.find('span')",
-      "$divs.on('touchstart', (e) => 1)",
-      "$divs.off('touchstart', (e) => 1)",
+      "$divs.on('touchend', (e) => 1)",
+      "$divs.off('touchend', (e) => 1)",
+      "$divs.one('touchend', (e) => 1)",
+      "$divs.ready((e) => 1)",
       "$divs.click((e) => 1)",
       "$divs.attr('data-t', '1')",
       "$divs.attr('data-t')",
+      "$divs.removeAttr('data-t')",
       "$divs.prop('t', '1')",
       "$divs.prop('t')",
       "$divs.data('t', '1')",
       "$divs.data('t')",
       "$divs.focus()",
+      "$divs.blur()",
       "$divs.toggleClass('t')",
-      "$divs.hasClass('t')",
+      "$divs.hasClass('tt')",
+      "$divs.get(0)",
+      "$divs.index()",
       "$divs.first()",
       "$divs.last()",
+      "$divs.eq(0)",
       "$divs.next('span')",
       "$divs.prev('span')",
       "$divs.siblings('span')",
@@ -64,8 +72,10 @@
       let methodNum = 0;
       let jqTotal = 0;
       let tjqTotal = 0;
+      let zTotal = 0;
       let validCount = 0;
       let improvementTotal = 0;
+      let zImprovementTotal = 0;
       function run() {
         let method = methods[methodNum++];
         let tr = document.createElement('tr');
@@ -81,6 +91,13 @@
           tr.appendChild(td);
 
           td = document.createElement('td');
+          tr.appendChild(td);
+
+          td = document.createElement('td');
+          td.textContent = "x" + Math.round(zImprovementTotal/validCount*10)/10;
+          tr.appendChild(td);
+
+          td = document.createElement('td');
           td.textContent = "x" + Math.round(improvementTotal/validCount*10)/10;
           tr.appendChild(td);
 
@@ -93,8 +110,16 @@
 
         let jqfunc = Function('$divsa', '$', 'let $divs = $divsa.a; $divsa.b = ' + method + '; $divsa.a = $divs;');
         let tjqfunc = Function('$divsa', '$', 'let $divs = $divsa.a; $divsa.b = ' + method + '; $divsa.a = $divs;');
+        let zfunc = Function('$divsa', '$', 'let $divs = $divsa.a; $divsa.b = ' + method + '; $divsa.a = $divs;');
 
         let start;
+
+        start = Math.round(performance.now()*100);
+        for(let i = 0; i < 1; i++) {
+          zfunc($zDivs, Zepto);
+        }
+        let zTime = Math.round(performance.now()*100) - start;
+        zTotal += zTime;
 
         start = Math.round(performance.now()*100);
         for(let i = 0; i < 1; i++) {
@@ -111,6 +136,7 @@
         tjqTotal += tjqTime;
 
         let pass = $tjqDivs.b === $jqDivs.b;
+        let zpass = $zDivs.b === $jqDivs.b;
         if ($tjqDivs.b instanceof Array) {
           pass = $tjqDivs.b.length === $jqDivs.b.length;
           pass = pass && $tjqDivs.b.every((elem) => $jqDivs.b.is(elem));
@@ -118,11 +144,17 @@
           // pass = $tjqDivs.b.length + " " + $jqDivs.b.length;
         }
 
-        validCount += tjqTime > 20 ? 1 : 0;
-        improvementTotal += tjqTime > 20 ? (jqTime/tjqTime) : 0;
+        let valid = tjqTime > 0 && jqTime / tjqTime < 100
+        validCount += valid ? 1 : 0
+        improvementTotal += valid ? (jqTime/tjqTime) : 0;
+        zImprovementTotal += valid ? (zTime/tjqTime) : 0;
 
         let td = document.createElement('td');
         td.textContent = method;
+        tr.appendChild(td);
+
+        td = document.createElement('td');
+        td.textContent = Math.round(zTime)/100 + "ms";
         tr.appendChild(td);
 
         td = document.createElement('td');
@@ -131,6 +163,10 @@
 
         td = document.createElement('td');
         td.textContent = Math.round(tjqTime)/100 + "ms";
+        tr.appendChild(td);
+
+        td = document.createElement('td');
+        td.textContent = "x" + Math.round(zTime/tjqTime*10)/10;
         tr.appendChild(td);
 
         td = document.createElement('td');
@@ -156,7 +192,7 @@
 
 </head>
 <body>
-  <h1>jQuery - tjQuery Benchmarks <span id="percent"></span></h1>
+  <h1>jQuery/Zepto/tjQuery Benchmarks <span id="percent"></span></h1>
 
   <span class="container">
       <p class="intro">
@@ -166,7 +202,15 @@
       </p>
     
       <table>
-        <thead><tr><th>Code</th><th>jQuery Time</th><th>tjQuery Time</th><th>Improvement</th><th>Test</th></tr></thead>
+        <thead><tr>
+          <th>Code</th>
+          <th>Zepto Time</th>
+          <th>jQuery Time</th>
+          <th>tjQuery Time</th>
+          <th>xZepto</th>
+          <th>xjQuery</th>
+          <th>Test</th>
+        </tr></thead>
         <tbody id="results">
     
         </tbody>

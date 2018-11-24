@@ -14,7 +14,7 @@ Tiny jQuery is an ES6 based, stripped down jQuery to the most used bits, with al
 - Dot chaining
 
 ## The Solution
-Tiny jQuery (**tjQuery**) is 3kb in size and was made to take out all the bad / unneeded bits from jQuery, and keep DOM traversal, basic and native event handling, and attribute manipulation. The result is pure syntactic sugar, which is what we love about jQuery to begin with.
+Tiny jQuery (**tjQuery**) is 3.5kb in size (**2.1kb gzipped**) and was made to take out all the bad / unneeded bits from jQuery, and keep DOM traversal, basic and native event handling, and attribute manipulation. The result is pure syntactic sugar, which is what we love about jQuery to begin with.
 
 Additionally, [jQuery Once](https://github.com/RobLoach/jquery-once) functionality is included, and the `.click()` method has been modified to turn the element accessibility friendly by adding `tabindex` and keyboard `enter` behavior.
 
@@ -24,23 +24,33 @@ Additionally, [jQuery Once](https://github.com/RobLoach/jquery-once) functionali
 - `.add()`
 - `.is()`
 - `.not()`
+- `.has()`
 - `.find()`
 - `.on()`
 - `.off()`
+- `.one()`
 - `.click()`
+- `.ready()`
 - `.attr()`
 - `.removeAttr()`
 - `.prop()`
 - `.val()`
 - `.text()`
+- `.scrollTop()`
+- `.scrollLeft()`
+- `.label()`
 - `.data()`
 - `.removeData()`
 - `.focus()`
+- `.blur()`
 - `.addClass()`
 - `.removeClass()`
 - `.toggleClass()`
 - `.hasClass()`
 - `.once()`
+- `.get()`
+- `.index()`
+- `.eq()`
 - `.first()`
 - `.last()`
 - `.next()`
