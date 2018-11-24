@@ -144,7 +144,7 @@
           // pass = $tjqDivs.b.length + " " + $jqDivs.b.length;
         }
 
-        let valid = tjqTime > 0 && jqTime / tjqTime < 100
+        let valid = tjqTime > 20 && jqTime / tjqTime < 100
         validCount += valid ? 1 : 0
         improvementTotal += valid ? (jqTime/tjqTime) : 0;
         zImprovementTotal += valid ? (zTime/tjqTime) : 0;

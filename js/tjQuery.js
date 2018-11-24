@@ -28,7 +28,7 @@
        * @returns {Array}
        */
       map(callback) {
-        return from(this, Array).map(callback, this);
+        return from(this, Array).map(callback);
       }
 
       /**
@@ -98,7 +98,7 @@
        */
       filter(selector) {
         if (typeof selector === 'function') {
-          return from(Array.prototype.filter.call(this, selector));
+          return from(from(this, Array).filter(selector));
         }
         if (typeof selector === 'string') {
           return this.filter((elem) => elem.matches(selector));
@@ -123,7 +123,7 @@
       
       /**
        * Element.addEventListener()
-       * @param {string} type 
+       * @param {string} events 
        * @param {string} [selector] delegate selector 
        * @param {function} callback 
        * @param {Object} [options] addEventListener options.
@@ -138,7 +138,7 @@
             }
           };
           callback.originalCallback = originalCallback;
-          originalCallback.tjqHanlers = originalCallback.tjqHanlers || [];
+          originalCallback.tjqHandlers = originalCallback.tjqHandlers || [];
           originalCallback.tjqHandlers.push(callback);
         } else {
           options = callback;
@@ -147,11 +147,12 @@
         objectOrProp(events, callback, (k, v) => {
           this.each((elem) => {
             let $elem = $(elem);
-            let events = $elem.data('___events___') || {};
-            if (!events[k]) {
-              events[k] = new Set()
+            let events = $elem.data('___events___');
+            if (!events) {
+              events = {};
               $elem.data('___events___', events);
             }
+            events[k] = events[k] || new Set();
             events[k].add(v);
             elem.addEventListener(k, v, options);
           });
@@ -186,7 +187,7 @@
               evs = Object.keys(handlers)
             }
             evs.forEach((ev) => {
-              (handlers || []).forEach((handler) => {
+              (handlers[ev] || []).forEach((handler) => {
                 elem.removeEventListener(ev, handler);
               });
               delete handlers[ev];
@@ -198,7 +199,7 @@
 
       /**
        * Element.addEventListener()
-       * @param {string} type 
+       * @param {string} events
        * @param {function} callback 
        * @param {Object} [options] addEventListener options.
        * @returns {this}
@@ -352,6 +353,7 @@
                get(get(this.attr('aria-labelledby')) && $('#' + this.attr('aria-labelledby')).label()) || 
                get(get(this.attr('id')) && $('label[for="'+ this.attr('id') + '"]').label()) ||
                get(this.attr('title')) || 
+               get(this.attr('placeholder')) ||
                get(this.attr('alt')) || 
                (this.text() || "").trim();
       }
@@ -520,7 +522,7 @@
        * @returns {TjQueryCollection}
        */
       first() {
-        return this.slice(0, 1);
+        return this.eq(0);
       }
 
       /**
@@ -528,7 +530,7 @@
        * @returns {TjQueryCollection}
        */
       last() {
-        return this.slice(-1);
+        return this.eq(-1);
       }
 
       /**
@@ -537,7 +539,7 @@
        * @returns {TjQueryCollection}
        */
       eq(index) {
-        return this.slice(index, 1);
+        return this.slice(index, (index + 1) || undefined);
       }
 
       /**
@@ -546,7 +548,9 @@
        * @returns {TjQueryCollection}
        */
       next(selector) {
-        return from(propElem(this, 'nextElementSibling', selector));
+        return from(this.map((elem) => elem.nextElementSibling).filter((elem) => {
+          return elem && (!selector || elem.matches(selector))
+        }));
       }
 
       /**
@@ -555,7 +559,9 @@
        * @returns {TjQueryCollection}
        */
       prev(selector) {
-        return from(propElem(this, 'previousElementSibling', selector));
+        return from(this.map((elem) => elem.previousElementSibling).filter((elem) => {
+          return elem && (!selector || elem.matches(selector))
+        }));
       }
 
       /**
@@ -564,8 +570,8 @@
        * @returns {TjQueryCollection}
        */
       siblings(selector) {
-        return $(propElem(this, 'previousElementSibling', selector, true)
-                  .concat(propElem(this, 'nextElementSibling', selector, true)));
+        let parts = propElem(this, 'previousElementSibling', selector, true);
+        return $(propElem(this, 'nextElementSibling', selector, true, false, parts));
       }
       
       /**
@@ -616,55 +622,68 @@
      * @param {*} context 
      * @returns {TjQueryCollection}
      */
-    function $(selector, c) {
+    function $(selector, context) {
       if (!selector) return new TjQueryCollection();
-      if (!c && selector instanceof TjQueryCollection) return selector;
-      if (!c && selector === document) return new TjQueryCollection(document);
+      if (!context && selector instanceof TjQueryCollection) return new TjQueryCollection(...selector);
+      if (!context && selector === document) return new TjQueryCollection(document);
+      if (typeof selector === 'function') $document.ready(selector);
       
-      selector = (typeof selector === 'object' && selector.length) ? from(selector, Array) : selector;
       let selectors = selector instanceof Array ? selector : [selector];
-      let context = c ? $(c) : $document;
+      let c = context ? $(context) : $document;
       let elems = new Set();
     
       for (let sel of selectors) {
         if (sel instanceof TjQueryCollection) {
-          if (!c && selectors.length === 1) {
+          if (!context && selectors.length === 1) {
             return sel;
           }
           sel.forEach((elem) => elems.add(elem));
         } else if (sel instanceof Element) {
-          if (!c && selectors.length === 1) {
+          if (!context && selectors.length === 1) {
             return new TjQueryCollection(sel);
           }
           elems.add(sel)
         }  else if (sel instanceof NodeList) {
-          sel.forEach((elem) => {
+          for(let i = 0; i < sel.length; i++) {
+            let elem = sel[i];
             if (elem instanceof Element) {
               elems.add(elem);
             }
-          });
+          }
         } else if (sel instanceof HTMLCollection) {
-          if (!c && selectors.length === 1) {
+          if (!context && selectors.length === 1) {
             return from(sel);
           }
           sel.forEach((elem) => {
             elems.add(elem);
           });
         } else if (typeof sel === 'string') {
-          if (!c && selectors.length === 1) {
+          if (!context && selectors.length === 1) {
             return from(document.querySelectorAll(sel));
           }
-          context.each((cElem) => {
+          c.each((cElem) => {
             cElem.querySelectorAll(sel).forEach((elem) => elems.add(elem));
           });
+        } else if (sel instanceof Set) {
+          sel.forEach((elem) => {
+            if(elem instanceof Element) {
+              elems.add(elem);
+            }
+          })
+        } else {
+          from(sel).forEach((elem) => {
+            if(elem instanceof Element) {
+              elems.add(elem);
+            }
+          })
         }
       }
       elems = from(elems);
     
       // Filter within context
-      if (c) {
+      if (context) {
         elems = elems.filter((elem) => {
-          return context.some((cont) => cont !== elem && cont.contains(elem));
+          return c.some((cont) => cont !== elem && cont.contains(elem));
         });
       }
 
@@ -690,8 +709,8 @@
      * @param {string} [selector] 
      * @param {boolean} [multiple] 
      */
-    function propElem(collection, prop, selector, multiple, includeFirst) {
-      let res = new Set();
+    function propElem(collection, prop, selector, multiple, includeFirst, cache) {
+      let res = cache ? cache : new Set();
       collection.forEach((elem) => {
         if (!elem) return;
         let found = false;
@@ -699,21 +718,22 @@
         if (includeFirst) {
           next = elem;
         }
+        if (res.has(next)) return;
         do {
           if (next instanceof Element && (!selector || next.matches(selector))) {
             res.add(next);
             found = true;
           }
-        } while ((!found || multiple) && next && (next = next[prop]))
+        } while ((!found || multiple) && next && (next = next[prop]) && !res.has(next))
       });
 
-      return from(res, Array);
+      return res;
     }
 
     /**
      * Helper function for excuting by name/value or multiple object key/value pairs.
      * @param {string|object} name the string may also be space separated for multi value.
-     * @param {*} set 
+     * @param {*} [set]
      * @param {function} each 
      * @returns {boolean} whether a key/value pair was provided.
      */
@@ -735,13 +755,13 @@
 
     /**
      * Faster Array.from().
-     * @param {object} object 
-     * @param {contructor} [Class] defaults to TjQueryCollection
+     * @param {Object} object 
+     * @param {typeof Array} [Class] defaults to TjQueryCollection
      */
     function from(object, Class) {
       Class = typeof Class === 'undefined' ? TjQueryCollection : Class;
       if (typeof object !== 'object' || !object) return new Class(); 
-      if (object.isPrototypeOf(Class)) return object;
+      if (Class.isPrototypeOf(object)) return object;
       if (object.length) {
         let i;
         let arr = new Class(object.length);
@@ -750,7 +770,14 @@
         }
         return arr;
       }
+      if (object.size) {
+        let i = 0 ;
+        let arr = new Class(object.size);
+        object.forEach((item) => {
+          arr[i++] = item;
+        });
+        return arr;
+      }
       return Class.from(object);
     }
   })();
-  
