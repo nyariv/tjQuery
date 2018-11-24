@@ -21,17 +21,21 @@ p, table {
 }
 
 p {
-  width: 400px;
+  width: 300px;
 }
 
 table {
-  width: 700px;
+  width: 850px;
 }
 
 td, th {
   text-align: left;
   padding: 5px;
   border-bottom: 1px dotted #ddd;
+}
+
+td:nth-child(4n) {
+  font-weight: bold;
 }
 
 td:first-child, tr:last-child {
