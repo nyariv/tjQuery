@@ -11,6 +11,8 @@
   const tjQuery = (() => {
     "use strict";
 
+    let elementStorage = new WeakMap();
+
     class TjQueryCollection extends Array {
       
       /**
@@ -28,7 +30,15 @@
        * @returns {Array}
        */
       map(callback) {
-        return from(this, Array).map(callback);
+        return this.toArray().map(callback);
+      }
+
+      /**
+       * Convert to Array.
+       * @returns {Array}
+       */
+      toArray() {
+        return from(this, Array);
       }
 
       /**
@@ -98,7 +108,7 @@
        */
       filter(selector) {
         if (typeof selector === 'function') {
-          return from(from(this, Array).filter(selector));
+          return from(this.toArray().filter(selector));
         }
         if (typeof selector === 'string') {
           return this.filter((elem) => elem.matches(selector));
@@ -114,9 +124,7 @@
        */
       find(selector) {
         if (typeof selector === 'function') {
-          return $(from(this, Array).find(selector, this));
-        } else if (typeof selector === 'string') {
-          return $(this.map((elem) => elem.querySelectorAll(selector)));
+          return super.find(selector);
         }
         return $(selector, this);
       }
@@ -129,32 +137,49 @@
        * @param {Object} [options] addEventListener options.
        * @returns {this}
        */
-      on(events, selector, callback, options) {
-        if (typeof selector === 'string') {
-          let originalCallback = callback;
-          callback = (e) => {
-            if (e.target.matches(selector)) {
-              originalCallback(e);
+      on(events, selector, data, callback, options) {
+        let params = parseOnParams(events, selector, data, callback, options);
+
+        objectOrProp(params.events, params.callback, (namespace, originalCallback) => {
+          let namespaces = namespace.split(".");
+          let ev = namespaces.shift();
+
+          let wrapper = (e) => {
+            if (!params.selector || e.target.matches(params.selector)) {
+              let handlerObj = e;
+              handlerObj.data = params.data;
+              originalCallback(handlerObj);
             }
           };
-          callback.originalCallback = originalCallback;
-          originalCallback.tjqHandlers = originalCallback.tjqHandlers || [];
-          originalCallback.tjqHandlers.push(callback);
-        } else {
-          options = callback;
-          callback = selector;
-        }
-        objectOrProp(events, callback, (k, v) => {
+
           this.each((elem) => {
-            let $elem = $(elem);
-            let events = $elem.data('___events___');
-            if (!events) {
-              events = {};
-              $elem.data('___events___', events);
+            let eventsStore = getStore(elem, 'events', new Map());
+
+            let event = eventsStore.get(ev);
+            if (!event) {
+              event = new Map();
+              eventsStore.set(ev, event);
             }
-            events[k] = events[k] || new Set();
-            events[k].add(v);
-            elem.addEventListener(k, v, options);
+
+            let sel = event.get(params.selector);
+            if (!sel) {
+              sel = new Map();
+              event.set(params.selector, sel);
+            }
+
+            let handlers = sel.get(originalCallback);
+            if (!handlers) {
+              handlers = new Set();
+              sel.set(originalCallback, handlers);
+            }
+
+            handlers.add({ 
+              namespaces: namespaces,
+              handler: wrapper,
+              originalHandler: originalCallback
+            });
+
+            elem.addEventListener(ev, wrapper, params.options);
           });
         });
 
@@ -167,34 +192,48 @@
        * @param {function} callback 
        * @returns {this}
        */
-      off(events, callback) {
-        if(!objectOrProp(events, callback, (k, v) => {
-          let handlers = callback.tjqHandlers || [];
-          handlers.push(v);
+      off(events, selector, callback) {
+        let params = parseOnParams(events, selector, callback);
+        objectOrProp(params.events, params.callback, (namespace, originalCallback) => {
+          let namespaces = namespace.split(".");
+          let ev = namespaces.shift();
           this.each((elem) => {
-            handlers.forEach((handler) => {
-              elem.removeEventListener(k, handler);
-            })
-          });
-        })) {
-          let evs = [];
-          if (typeof events === 'string') {
-            evs = events.split(' ');
-          }
-          this.each((elem) => {
-            let handlers = $(elem).data('___events___') || {};
-            if (typeof events === 'undefined') {
-              evs = Object.keys(handlers)
-            }
-            evs.forEach((ev) => {
-              (handlers[ev] || []).forEach((handler) => {
-                elem.removeEventListener(ev, handler);
-              });
-              delete handlers[ev];
+            let eventsStore = getStore(elem, 'events', new Map());
+            let event = eventsStore.get(ev) || new Map();
+            let sel = event.get(params.selector) || new Map();
+            let handlers = sel.get(originalCallback) || new Set();
+            handlers.forEach((container) => {
+              if (namespaces.every((ns) => container.namespaces.includes(ns))) {
+                elem.removeEventListener(ev, container.handler);
+                handlers.delete(container);
+                if (!handlers.size) {
+                  sel.delete(originalCallback);
+                  if(!sel.size) {
+                    event.delete(params.selector);
+                    if (!event.size) {
+                      eventsStore.delete(ev);
+                    }
+                  }
+                }
+              }
             });
+            elem.removeEventListener(ev, originalCallback);
           });
-        }
+        });
+
         return this;
+      }
+
+      /**
+       * Element.dispatchEvent()
+       * @param {string} eventType 
+       * @param {Object} [extraParams] 
+       */
+      trigger(eventType, extraParams) {
+        let event = new Event(eventType, extraParams);
+        return this.each((elem) => {
+          elem.dispatchEvent(event);
+        });
       }
 
       /**
@@ -204,11 +243,44 @@
        * @param {Object} [options] addEventListener options.
        * @returns {this}
        */
-      one(events, callback, options) {
-        options = options || {};
-        options.once = true;
-        return this.on(events, callback, options);
+      one(events, selector, data, callback, options) {
+        let params = parseOnParams(events, selector, data, callback, options);
+        params.options = params.options || {};
+        params.options.once = true;
+        return this.on(...Object.values(params).filter((param) => param));
       };
+      
+      /**
+       * .on('click') alias. Adds accesibility support.
+       * @param {function} callback 
+       * @param {Object} [options] addEventListener options.
+       * @returns {this}
+       */
+      click(data, callback, options) {
+        if (!arguments.length) {
+          return this.each((elem) => {
+            elem.click();
+          });
+        }
+        
+        this
+          .on('click', data, callback, options)
+          .not('a[href], button, input, select, textarea')
+          .once('tjqAllyClick')
+          .addClass('tjq-ally-click')
+          .attr({
+            tabindex: 0,
+            role: 'button'
+          })
+          .on('keydown', (e) => {
+            if (e.keyCode === 13 &&  // Enter key pressed
+                e.currentTarget.getAttribute('aria-disabled') !== 'true') {
+              e.currentTarget.click();
+            }
+          });
+
+        return this;
+      }
 
       /**
        * document.addEventListener('DOMContentLoaded')
@@ -225,39 +297,8 @@
       }
       
       /**
-       * .on('click') alias. Adds accesibility support.
-       * @param {function} callback 
-       * @param {Object} [options] addEventListener options.
-       * @returns {this}
-       */
-      click(callback, options) {
-        if (typeof callback === 'undefined') {
-          return this.each((elem) => {
-            elem.click();
-          });
-        }
-        
-        this
-          .on('click', callback, options)
-          .not('a[href], button, input, select, textarea')
-          .once('tjqAllyClick')
-          .addClass('tjq-ally-click')
-          .attr('tabindex', 0)
-          .attr('role', 'button')
-          .on('keydown', (e) => {
-            let target = $(e.currentTarget);
-            if (e.keyCode === 13 &&  // Enter key pressed
-                target.attr('aria-disabled') !== 'true') {
-              target.click();
-            }
-          });
-
-        return this;
-      }
-      
-      /**
        * Element.getAttribute()/setAttribute()
-       * @param {string} key 
+       * @param {string|Object} key 
        * @param {string|number} [set]
        * @returns {this|string}
        */
@@ -276,16 +317,14 @@
        * @param {string} key 
        */
       removeAttr(key) {
-        this.each((elem) => {
+        return this.each((elem) => {
           elem.removeAttribute(key);
         });
-
-        return this;
       }
 
       /**
        * Set/get element property.
-       * @param {string} key 
+       * @param {string|Object} key 
        * @param {*} [set] 
        * @returns {this|*}
        */
@@ -305,6 +344,10 @@
        * @returns {this|string}
        */
       val(set) {
+        if (typeof set !== 'undefined') {
+          this.prop('value', set);
+          this.trigger('change');
+        }
         return this.prop('value', set);
       }
 
@@ -338,12 +381,11 @@
       /**
        * Get the label of the first element, as read by screen readers.
        * @param {string} [set]
-       * @returns string
+       * @returns {string}
        */
       label(set) {
         if (typeof set === 'string') {
-          this.attr('aria-label', set);
-          return this;
+          return this.attr('aria-label', set);
         }
         
         if (!this.get(0)) return null;
@@ -360,19 +402,22 @@
       
       /**
        * Store/retrieve abitrary data on the element.
-       * @param {string|object} key 
+       * @param {string|Object} key 
        * @param {*} [set] 
        * @returns {this|*}
        */
       data(key, set) {
         if(objectOrProp(key, set, (k, v) => {
           this.each((elem) => {
-            elem.tjqData = elem.tjqData || {};
-            elem.tjqData[k] = v;
+            let data = getStore(elem, 'data', {});
+            data[k] = v;
           });
         })) return this;
 
-        return this[0] ? (this[0].tjqData || {})[key] : null;
+        if (!this[0]) return null;
+
+        let data = getStore(this[0], 'data');
+        return typeof key === 'undefined' ? data : (data || {})[key];
       }
 
       /**
@@ -394,11 +439,11 @@
        * @param {Object} [options] addEventListener options.
        * @returns {this}
        */
-      focus(callback, options) {
-        if (typeof callback === 'undefined' && this[0] && typeof this[0].focus === 'function') {
+      focus(data, callback, options) {
+        if (!arguments.length && this[0] && typeof this[0].focus === 'function') {
           this[0].focus();
-        } else if (typeof callback !== 'undefined') {
-          this.on('focus', callback, options);
+        } else if (arguments.length) {
+          this.on('focus', data, callback, options);
         }
 
         return this;
@@ -410,11 +455,11 @@
        * @param {Object} [options] addEventListener options.
        * @returns {this}
        */
-      blur(callback, options) {
-        if (typeof callback === 'undefined' && this[0] && typeof this[0].blur === 'function') {
+      blur(data, callback, options) {
+        if (!arguments.length && this[0] && typeof this[0].blur === 'function') {
           this[0].blur();
-        } else if (typeof callback !== 'undefined') {
-          this.on('blur', callback, options);
+        } else if (arguments.length) {
+          this.on('blur', data, callback, options);
         }
 
         return this;
@@ -456,12 +501,12 @@
 
       /**
        * Element.classList.contains()
-       * @param {string|string[]} name 
+       * @param {string} name 
        * @returns {boolean}
        */
       hasClass(name) {
-        name = name instanceof Array ? name : [name];
-        return this.some((elem) => name.every((className) => elem.classList.contains(className)));
+        let nameArr = name.split(' ');
+        return this.some((elem) => nameArr.every((className) => elem.classList.contains(className)));
       }
       
       /**
@@ -472,11 +517,9 @@
       once(identifier) {
         identifier = typeof identifier === 'undefined' ? 'once' : identifier;
         let res = this.filter((elem) => {
-          let $elem = $(elem);
-          let once = $elem.data('tjqOnce') || [];
-          if(!once.includes(identifier)) {
-            once.push(identifier);
-            $elem.data('tjqOnce', once);
+          let once = getStore(elem, 'once', new Set());
+          if(!once.has(identifier)) {
+            once.add(identifier);
             return true;
           }
           return false;
@@ -495,7 +538,7 @@
        * @returns {Element}
        */
       get(index) {
-        return this[index];
+        return this[index < 0 ? this.length + index : index];
       }
 
       /**
@@ -539,11 +582,11 @@
        * @returns {TjQueryCollection}
        */
       eq(index) {
-        return this.slice(index, (index + 1) || undefined);
+        return this.get(index) ? new TjQueryCollection(this.get(index)) : new TjQueryCollection();
       }
 
       /**
-       * Element.nextSibling
+       * Element.nextElementSibling
        * @param {string} [selector]
        * @returns {TjQueryCollection}
        */
@@ -554,7 +597,26 @@
       }
 
       /**
-       * Element.previousSibling
+       * Element.nextElementSibling
+       * @param {string} [selector]
+       * @param {string} [filter]
+       * @returns {TjQueryCollection}
+       */
+      nextUntil(selector, filter) {
+        return from(propElem(this, 'nextElementSibling', filter, true, false, selector));
+      }
+
+      /**
+       * Element.nextElementSibling
+       * @param {string} [selector]
+       * @returns {TjQueryCollection}
+       */
+      nextAll(selector) {
+        return this.nextUntil(undefined, selector);
+      }
+
+      /**
+       * Element.previousElementSibling
        * @param {string} [selector]
        * @returns {TjQueryCollection}
        */
@@ -565,13 +627,34 @@
       }
 
       /**
+       * Element.previousElementSibling
+       * @param {string|Element} [selector]
+       * @param {string} [filter]
+       * @returns {TjQueryCollection}
+       */
+      prevUntil(selector, filter) {
+        return from(propElem(this, 'previousElementSibling', filter, true, false, selector, true));
+      }
+
+      /**
+       * Element.previousElementSibling
+       * @param {string} [selector]
+       * @returns {TjQueryCollection}
+       */
+      prevAll(selector) {
+        return this.prevUntil(undefined, selector);
+      }
+
+      /**
        * Get all sibling elements.
        * @param {string} [selector]
        * @returns {TjQueryCollection}
        */
       siblings(selector) {
-        let parts = propElem(this, 'previousElementSibling', selector, true);
-        return $(propElem(this, 'nextElementSibling', selector, true, false, parts));
+        return $([
+          propElem(this, 'nextElementSibling', selector, true),
+          propElem(this, 'previousElementSibling', selector, true, false, false, true)
+        ]);
       }
       
       /**
@@ -580,7 +663,7 @@
        * @returns {TjQueryCollection}
        */
       children(selector) {
-        return $(propElem(this.map((elem) => elem.firstChild), 'nextElementSibling', selector, true, true));
+        return from(propElem(this.map((elem) => elem.firstChild), 'nextElementSibling', selector, true, true));
       }
       
       /**
@@ -589,8 +672,13 @@
        * @returns {TjQueryCollection}
        */
       parent(selector) {
-        let res = $(this.map((elem) => elem.parentNode));
-        return selector ? res.filter(selector) : res;
+        let res = new Set();
+        this.map((elem) => elem.parentNode).forEach((elem) => {
+          if(!res.has(elem) && elem instanceof Element && (!selector || elem.matches(selector))) {
+            res.add(elem);
+          }
+        });
+        return from(res);
       }
       
       /**
@@ -599,7 +687,7 @@
        * @returns {TjQueryCollection}
        */
       parents(selector) {
-        return $(propElem(this, 'parentNode', selector, true));
+        return from(propElem(this, 'parentNode', selector, true));
       }
       
       /**
@@ -624,13 +712,16 @@
      */
     function $(selector, context) {
       if (!selector) return new TjQueryCollection();
-      if (!context && selector instanceof TjQueryCollection) return new TjQueryCollection(...selector);
       if (!context && selector === document) return new TjQueryCollection(document);
-      if (typeof selector === 'function') $document.ready(selector);
+      if (typeof selector === 'function') {
+        $document.ready(selector);
+        return new TjQueryCollection();
+      }
       
       let selectors = selector instanceof Array ? selector : [selector];
-      let c = context ? $(context) : $document;
+      let c = context ? (context instanceof TjQueryCollection ? context : $(context)) : $document;
       let elems = new Set();
+      let skipFilter = false;
     
       for (let sel of selectors) {
         if (sel instanceof TjQueryCollection) {
@@ -654,7 +745,7 @@
           if (!context && selectors.length === 1) {
             return from(sel);
           }
-          sel.forEach((elem) => {
+          from(sel, Array).forEach((elem) => {
             elems.add(elem);
           });
         } else if (typeof sel === 'string') {
@@ -664,6 +755,9 @@
           c.each((cElem) => {
             cElem.querySelectorAll(sel).forEach((elem) => elems.add(elem));
           });
+          if (selectors.length === 1) {
+            skipFilter = true;
+          }
         } else if (sel instanceof Set) {
           sel.forEach((elem) => {
             if(elem instanceof Element) {
@@ -681,7 +775,7 @@
       elems = from(elems);
     
       // Filter within context
-      if (context) {
+      if (context && !skipFilter) {
         elems = elems.filter((elem) => {
           return c.some((cont) => cont !== elem && cont.contains(elem));
         });
@@ -689,14 +783,7 @@
 
       // Sort by apppearance
       if (selectors.length > 1) {
-        elems = elems.sort((a, b) => {
-          if( a === b) return 0;
-          if( a.compareDocumentPosition(b) & 2) {
-              // b comes before a
-              return 1;
-          }
-          return -1;
-        });
+        elems = elems.sort(sort);
       }
 
       return elems;
@@ -708,23 +795,27 @@
      * @param {string} prop 
      * @param {string} [selector] 
      * @param {boolean} [multiple] 
+     * @returns {Set}
      */
-    function propElem(collection, prop, selector, multiple, includeFirst, cache) {
-      let res = cache ? cache : new Set();
-      collection.forEach((elem) => {
+    function propElem(collection, prop, selector, multiple, includeFirst, stopAt, reverse) {
+      let res = new Set();
+      let cache = new Set();
+      let is = (elem, sel) => typeof sel === 'string' ? elem.matches(sel) : elem === sel;
+      (reverse ? collection.slice().reverse() : collection).forEach((elem) => {
         if (!elem) return;
-        let found = false;
+        if (cache.has(elem)) return;
+        cache.add(elem);
         let next = elem[prop];
         if (includeFirst) {
           next = elem;
         }
-        if (res.has(next)) return;
+        if (!next || (stopAt && is(next, stopAt))) return;
         do {
           if (next instanceof Element && (!selector || next.matches(selector))) {
             res.add(next);
-            found = true;
           }
-        } while ((!found || multiple) && next && (next = next[prop]) && !res.has(next))
+          cache.add(next);
+        } while (multiple && next && (next = next[prop]) && !cache.has(next) && (!stopAt || !is(next, stopAt)))
       });
 
       return res;
@@ -757,6 +848,7 @@
      * Faster Array.from().
      * @param {Object} object 
      * @param {typeof Array} [Class] defaults to TjQueryCollection
+     * @returns {Array}
      */
     function from(object, Class) {
       Class = typeof Class === 'undefined' ? TjQueryCollection : Class;
@@ -780,4 +872,55 @@
       }
       return Class.from(object);
     }
+    
+    function sort(a, b) {
+      if( a === b) return 0;
+      if( a.compareDocumentPosition(b) & 10) {
+          // b comes before a
+          return 1;
+      }
+      return -1;
+    }
+
+    function getStore(elem, store, defaultValue) {
+      if(!elementStorage.has(elem)) {
+        elementStorage.set(elem, new Map());
+      }
+
+      let types = elementStorage.get(elem);
+      if(typeof defaultValue !== 'undefined' && !types.has(store)) {
+        types.set(store, defaultValue);
+      }
+
+      return types.get(store);
+    }
+    
+    function parseOnParams(events, selector, data, callback, options) {
+      // (events, selector, data, options)
+      if (typeof events !== 'string') {
+        options = callback
+        callback = undefined;
+        // (events, data, options)
+        if (typeof selector !== 'string') {
+          options = data;
+          data = selector;
+          selector = undefined;
+        }
+      } else {
+        // (events, data, callback, options)
+        if (typeof selector !== 'string') {
+          options = callback;
+          callback = data;
+          data = selector;
+          selector = undefined;
+        }
+        if (typeof data === 'function') {
+          options = callback;
+          callback = data;
+          data = undefined;
+        }
+      }
+      return {events, selector, data, callback, options};
+    }
+
   })();
