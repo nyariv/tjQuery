@@ -20,14 +20,17 @@ Additionally, [jQuery Once](https://github.com/RobLoach/jquery-once) functionali
 
 ## Supported methods
 - All of `Array()`'s methods
+- `.toArray()`
 - `.each()`
 - `.add()`
 - `.is()`
 - `.not()`
 - `.has()`
+- `.filter()`
 - `.find()`
 - `.on()`
 - `.off()`
+- `.trigger()`
 - `.one()`
 - `.click()`
 - `.ready()`
@@ -54,7 +57,11 @@ Additionally, [jQuery Once](https://github.com/RobLoach/jquery-once) functionali
 - `.first()`
 - `.last()`
 - `.next()`
+- `.nextUntil()`
+- `.nextAll()`
 - `.prev()`
+- `.prevUntil()`
+- `.prevAll()`
 - `.siblings()`
 - `.children()`
 - `.parent()`

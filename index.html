@@ -14,66 +14,162 @@
   <link rel="stylesheet" href="css/style.css">
 
   <script>
-    var $jqDivs = {};
-    var $tjqDivs = {};
-    var $zDivs = {};
-    let methods = [
-      "$divs = $('div')",
-      "$('span', $divs)",
-      "$divs.add('span')",
-      "$divs.each((e) => 1)",
-      "$divs.is('span')",
-      "$divs.not('span')",
-      "$divs.has('span')",
-      "$divs.filter('span')",
-      "$divs.find('span')",
-      "$divs.on('touchend', (e) => 1)",
-      "$divs.off('touchend', (e) => 1)",
-      "$divs.one('touchend', (e) => 1)",
-      "$divs.ready((e) => 1)",
-      "$divs.click((e) => 1)",
-      "$divs.attr('data-t', '1')",
-      "$divs.attr('data-t')",
-      "$divs.removeAttr('data-t')",
-      "$divs.prop('t', '1')",
-      "$divs.prop('t')",
-      "$divs.data('t', '1')",
-      "$divs.data('t')",
-      "$divs.focus()",
-      "$divs.blur()",
-      "$divs.toggleClass('t')",
-      "$divs.hasClass('tt')",
-      "$divs.get(0)",
-      "$divs.index()",
-      "$divs.first()",
-      "$divs.last()",
-      "$divs.eq(0)",
-      "$divs.next('span')",
-      "$divs.prev('span')",
-      "$divs.siblings('span')",
-      "$divs.children('span')",
-      "$divs.parent('span')",
-      "$divs.parents('span')",
-      "$divs.closest('span')",
-    ];
-    
-    let dummyContent = (level, children, div) => {
-      div = div || document.createElement('div');
-      if(level <= 0) return div;
-      level--;
-      for(let i = 0; i < children; i++) {
-        div.appendChild(dummyContent(level, children, document.createElement(i % 2 ? 'div' : 'span')));
+  tjQuery(() => {
+    console.log('ready');
+    let select = tjQuery('#benchmark');
+    select.on('change', (e) => {
+      let val = select.val();
+      switch (select.val()) {
+        case "1":
+          divsLevel = 1;
+          loopCount = 10000;
+          break;
+        case "2":
+          divsLevel = 2;
+          loopCount = 5000;
+          break;
+        case "3":
+          divsLevel = 3;
+          loopCount = 1000;
+          break;
+        case "4":
+          divsLevel = 4;
+          loopCount = 100;
+          break;
+        case "5":
+          divsLevel = 5;
+          loopCount = 10;
+          break;
       }
-      return div;
-    };
-    setTimeout(() => {
-      document.getElementById('dummy').appendChild(dummyContent(5, 6));
+      
+      methodNum = 0;
+      jqTotal = 0;
+      tjqTotal = 0;
+      zTotal = 0;
+      validCount = 0;
+      zValidCount = 0;
+      improvementTotal = 0;
+      zImprovementTotal = 0;
+      document.getElementById('results').innerHTML = "";
+      document.getElementById('dummy').innerHTML = "";
+      document.getElementById('dummy').appendChild(dummyContent(divsLevel, divsLevel));
+      run();
+    });
 
+    setTimeout(() => {
+      select.val("5");
+    })
+  })</script>
+
+</head>
+<body>
+  <h1>jQuery/Zepto/tjQuery Benchmarks <span id="percent"></span></h1>
+
+  <span class="container">
+      <p class="intro">
+        Here are the benchmarks comparing tjQuery to jQuery (3.3.1) for the supported 
+        methods. Tests are run on a series of alternating divs and spans with 5 nesting 
+        levels with 6 children each (6^5 divs and spans).
+        <select id="benchmark">
+            <option value="1">1 div, 10,000 iterations</option>
+            <option value="2">4 divs, 5,000 iterations</option>
+            <option value="3">27 divs, 1,000 iterations</option>
+            <option value="4">256 divs, 100 iterations</option>
+            <option value="5">3,125 divs, 10 iterations</option>
+        </select>
+      </p>
+    
+      <table>
+        <thead><tr>
+          <th>Code</th>
+          <th>Zepto Time</th>
+          <th>jQuery Time</th>
+          <th>tjQuery Time</th>
+          <th>xZepto</th>
+          <th>xjQuery</th>
+          <th>Test</th>
+        </tr></thead>
+        <tbody id="results">
+    
+        </tbody>
+      </table>
+  </span>
+
+  <div id="dummy" style="display: none"></div>
+
+  
+  <script>
+
+      let divsLevel = 2;
+      let loopCount = 5000;
+      let minAccuracy = 0.1;
+    
+      var $jqDivs = {};
+      var $tjqDivs = {};
+      var $zDivs = {};
+      let methods = [
+        "$divs = $('div')",
+        "$('span', $divs)",
+        "$divs.add('span')",
+        "$divs.each((e) => 1)",
+        "$divs.is('span')",
+        "$divs.not('span')",
+        "$divs.has('span')",
+        "$divs.filter('span')",
+        "$divs.find('span')",
+        "$divs.on('touchend', dummyFunc)",
+        "$divs.off('touchend', dummyFunc)",
+        "$divs.one('touchend', dummyFunc)",
+        "$divs.click((e) => 1)",
+        "$divs.trigger('click')",
+        "$divs.ready((e) => 1)",
+        "$divs.attr('data-t', '1')",
+        "$divs.attr('data-t')",
+        "$divs.removeAttr('data-t')",
+        "$divs.prop('t', '1')",
+        "$divs.prop('t')",
+        "$divs.data('t', '1')",
+        "$divs.data('t')",
+        "$divs.focus()",
+        "$divs.blur()",
+        "$divs.toggleClass('t')",
+        "$divs.hasClass('tt')",
+        "$divs.get(0)",
+        "$divs.index()",
+        "$divs.first()",
+        "$divs.last()",
+        "$divs.eq(0)",
+        "$divs.next('span')",
+        "$divs.prev('span')",
+        "$divs.children('span')",
+        "$divs.siblings('span')",
+        "$divs.parent('span')",
+        "$divs.parents('span')",
+        "$divs.closest('span')",
+        "$divs.nextUntil('div')",
+        "$divs.nextAll('div')",
+        "$divs.prevUntil('div')",
+        "$divs.prevAll('div')",
+      ];
+      
+      let dummyContent = (level, children, div) => {
+        div = div || document.createElement('div');
+        if(level <= 0) return div;
+        level--;
+        for(let i = 0; i < children; i++) {
+          div.appendChild(dummyContent(level, children, document.createElement(i % 2 ? 'div' : 'span')));
+        }
+        return div;
+      };
+  
+      let dummyFunc = () => 1;
+  
       let methodNum = 0;
       let jqTotal = 0;
       let tjqTotal = 0;
       let zTotal = 0;
       let validCount = 0;
+      let zValidCount = 0;
       let improvementTotal = 0;
       let zImprovementTotal = 0;
       function run() {
@@ -94,11 +190,11 @@
           tr.appendChild(td);
 
           td = document.createElement('td');
-          td.textContent = "x" + Math.round(zImprovementTotal/validCount*10)/10;
+          td.textContent = "x" + (Math.round(zImprovementTotal/zValidCount*10)/10 + Math.sign(zImprovementTotal));
           tr.appendChild(td);
 
           td = document.createElement('td');
-          td.textContent = "x" + Math.round(improvementTotal/validCount*10)/10;
+          td.textContent =  "x" + (Math.round(improvementTotal/validCount*10)/10  + Math.sign(improvementTotal));
           tr.appendChild(td);
 
           td = document.createElement('td');
@@ -114,40 +210,52 @@
 
         let start;
 
-        start = Math.round(performance.now()*100);
-        for(let i = 0; i < 1; i++) {
-          zfunc($zDivs, Zepto);
-        }
+        start = Math.round(performance.now()*100);;
+
+        try {
+          for(let i = 0; i < loopCount; i++) {
+            zfunc($zDivs, Zepto);
+          }
+        } catch(e) {}
         let zTime = Math.round(performance.now()*100) - start;
         zTotal += zTime;
 
         start = Math.round(performance.now()*100);
-        for(let i = 0; i < 1; i++) {
-          jqfunc($jqDivs, jQuery);
-        }
+        try {
+          for(let i = 0; i < loopCount; i++) {
+            jqfunc($jqDivs, jQuery);
+          }
+        } catch(e) {}
         let jqTime = Math.round(performance.now()*100) - start;
         jqTotal += jqTime;
 
         start = Math.round(performance.now()*100);
-        for(let i = 0; i < 1; i++) {
-          tjqfunc($tjqDivs, tjQuery);
-        }
+        try {
+          for(let i = 0; i < loopCount; i++) {
+            tjqfunc($tjqDivs, tjQuery);
+          }
+        } catch(e) {console.error(e)}
         let tjqTime = Math.round(performance.now()*100) - start;
         tjqTotal += tjqTime;
 
         let pass = $tjqDivs.b === $jqDivs.b;
-        let zpass = $zDivs.b === $jqDivs.b;
         if ($tjqDivs.b instanceof Array) {
           pass = $tjqDivs.b.length === $jqDivs.b.length;
           pass = pass && $tjqDivs.b.every((elem) => $jqDivs.b.is(elem));
-          // $jqDivs.b.each((i, elem) => $tjqDivs.b.is(elem) || console.log(elem));
+          let i = 0;
+          // $jqDivs.b.each((i, elem) => { if($tjqDivs.b[i++] !== elem) throw elem });
           // pass = $tjqDivs.b.length + " " + $jqDivs.b.length;
         }
 
-        let valid = tjqTime > 20 && jqTime / tjqTime < 100
-        validCount += valid ? 1 : 0
-        improvementTotal += valid ? (jqTime/tjqTime) : 0;
-        zImprovementTotal += valid ? (zTime/tjqTime) : 0;
+        let valid = tjqTime > minAccuracy * 100;
+        let jqValid = valid && jqTime > minAccuracy * 100;
+        let zValid = valid && zTime > minAccuracy * 100;
+        validCount += jqValid ? 1 : 0;
+        zValidCount += zValid ? 1 : 0;
+        jqImprovement = jqValid ? (jqTime - tjqTime > 0 ? (jqTime - tjqTime) / tjqTime : (tjqTime - jqTime) / jqTime * -1) : 0;
+        zImprovement = zValid ? (zTime - tjqTime > 0 ? (zTime - tjqTime) / tjqTime : (tjqTime - zTime) / zTime * -1) : 0;
+        improvementTotal += jqImprovement;
+        zImprovementTotal += zImprovement;
 
         let td = document.createElement('td');
         td.textContent = method;
@@ -166,16 +274,18 @@
         tr.appendChild(td);
 
         td = document.createElement('td');
-        td.textContent = "x" + Math.round(zTime/tjqTime*10)/10;
+        td.textContent = zValid ? Math.round((zImprovement + Math.sign(zImprovement)) * 100)/100 : "NA";
+        td.classList.add(zImprovement ? (zImprovement < 0 ? "negative" : 'positive') : undefined);
         tr.appendChild(td);
 
         td = document.createElement('td');
-        td.textContent = "x" + Math.round(jqTime/tjqTime*10)/10;
+        td.textContent = jqValid? Math.round((jqImprovement + Math.sign(jqImprovement)) * 100)/100 : "NA";
+        td.classList.add(jqImprovement ? (jqImprovement < 0 ? "negative" : 'positive') : undefined);
         tr.appendChild(td);
 
         td = document.createElement('td');
-        td.textContent = pass ? "PASS" : "FAIL";
-        // td.textContent = pass;
+        // td.textContent = pass ? "PASS" : "FAIL";
+        td.textContent = pass;
         tr.appendChild(td);
 
         document.getElementById('results').appendChild(tr);
@@ -184,39 +294,7 @@
 
         setTimeout(run, 50);
       }
-
-      run();
-    });
-
-  </script>
-
-</head>
-<body>
-  <h1>jQuery/Zepto/tjQuery Benchmarks <span id="percent"></span></h1>
-
-  <span class="container">
-      <p class="intro">
-        Here are the benchmarks comparing tjQuery to jQuery (3.3.1) for the supported 
-        methods. Tests are run on a series of alternating divs and spans with 5 nesting 
-        levels with 6 children each (6^5 divs and spans).
-      </p>
-    
-      <table>
-        <thead><tr>
-          <th>Code</th>
-          <th>Zepto Time</th>
-          <th>jQuery Time</th>
-          <th>tjQuery Time</th>
-          <th>xZepto</th>
-          <th>xjQuery</th>
-          <th>Test</th>
-        </tr></thead>
-        <tbody id="results">
-    
-        </tbody>
-      </table>
-  </span>
-
-  <div id="dummy" style="display: none"></div>
+  
+    </script>
 </body>
 </html>

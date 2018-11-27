@@ -10,7 +10,7 @@ body {
   display: flex;
 }
 
-p, table {
+.container > p, table {
   padding: 10px;
   border: 1px solid #ddd;
   border-radius: 5px;
@@ -38,6 +38,14 @@ table {
   width: 850px;
 }
 
+select {
+  margin: 1em 0;
+  width: 100%;
+  padding: 5px;
+  border: 1px solid black;
+  border-radius: 3px;
+}
+
 td, th {
   text-align: left;
   padding: 5px;
@@ -50,4 +58,12 @@ td:nth-child(4n) {
 
 td:first-child, tr:last-child {
   font-weight: bold;
+}
+
+.negative {
+  color: red;
+}
+
+.positive {
+  color: green;
 }
