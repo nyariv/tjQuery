@@ -95,7 +95,7 @@
       </table>
   </span>
 
-  <div id="dummy" style="display: none"></div>
+  <comtainer id="dummy" style="display: none"></comtainer>
 
   
   <script>
@@ -110,8 +110,10 @@
       let methods = [
         "$divs = $('div')",
         "$('span', $divs)",
+        "$divs.toArray()",
         "$divs.add('span')",
         "$divs.each((e) => 1)",
+        // "$divs.forEach((e) => 1)",
         "$divs.is('span')",
         "$divs.not('span')",
         "$divs.has('span')",
@@ -241,14 +243,16 @@
         let pass = $tjqDivs.b === $jqDivs.b;
         if ($tjqDivs.b instanceof Array) {
           pass = $tjqDivs.b.length === $jqDivs.b.length;
-          pass = pass && $tjqDivs.b.every((elem) => $jqDivs.b.is(elem));
           let i = 0;
+          let res = $($jqDivs.b);
+          pass = pass && $tjqDivs.b.every((elem) => res.is(elem));
+          i = 0;
           // $jqDivs.b.each((i, elem) => { if($tjqDivs.b[i++] !== elem) throw elem });
           // pass = $tjqDivs.b.length + " " + $jqDivs.b.length;
         }
 
         let valid = tjqTime > minAccuracy * 100;
-        let jqValid = valid && jqTime > minAccuracy * 100;
+        let jqValid = valid && jqTime > minAccuracy * 100 && jqTime / tjqTime < 100;
         let zValid = valid && zTime > minAccuracy * 100;
         validCount += jqValid ? 1 : 0;
         zValidCount += zValid ? 1 : 0;
@@ -279,7 +283,7 @@
         tr.appendChild(td);
 
         td = document.createElement('td');
-        td.textContent = jqValid? Math.round((jqImprovement + Math.sign(jqImprovement)) * 100)/100 : "NA";
+        td.textContent = jqValid ? Math.round((jqImprovement + Math.sign(jqImprovement)) * 100)/100 : "NA";
         td.classList.add(jqImprovement ? (jqImprovement < 0 ? "negative" : 'positive') : undefined);
         tr.appendChild(td);
 

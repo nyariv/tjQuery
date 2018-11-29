@@ -30,7 +30,11 @@
        * @returns {Array}
        */
       map(callback) {
-        return this.toArray().map(callback);
+        let res = new TjQueryCollection(this.length);
+        for(let i = 0; i < this.length; i++) {
+          res[i] = callback(i, this[i]);
+        }
+        return res;
       }
 
       /**
@@ -42,12 +46,26 @@
       }
 
       /**
+       * Convert to Set.
+       * @returns {Set}
+       */
+      toSet() {
+        let res = new Set();
+        this.each((index, elem) => res.add(elem));
+        return res;
+      }
+
+      /**
        * Array.forEach()
        * @param {function} callback 
        * @returns {this}
        */
       each(callback) {
-        this.forEach(callback);
+        let cont = true;
+        for (let i = 0; cont && i < this.length; i++) {
+          let elem = this[i];
+          cont = callback.call(this[i], i ,this[i]) !== false;
+        }
         return this;
       }
 
@@ -70,7 +88,7 @@
         if (typeof selector === "string") {
           return this.some((elem) => elem.matches(selector));
         } else {
-          let test = $(selector);
+          let test = selector instanceof TjQueryCollection ? selector : $(selector);;
           return this.some((elem) => test.includes(elem));
         }
       }
@@ -82,10 +100,10 @@
        */
       not(selector) {
         if (typeof selector === 'string') {
-          return this.filter((elem) => !elem.matches(selector));
+          return this.filter((i, elem) => !elem.matches(selector));
         }
-        let sel = $(selector);
-        return this.filter((elem) => !sel.includes(elem));
+        let sel = selector instanceof TjQueryCollection ? selector : $(selector);
+        return this.filter((i, elem) => !sel.includes(elem));
       }
       
       /**
@@ -95,10 +113,10 @@
        */
       has(selector) {
         if (typeof selector === 'string') {
-          return this.filter((elem) => elem.querySelectorAll(selector).length);
+          return this.filter((i, elem) => elem.querySelector(selector));
         }
         let sel = $(selector);
-        return this.filter((elem) => sel.some((test) => elem !== test && elem.contains(test)));
+        return this.filter((i, elem) => sel.some((test) => elem !== test && elem.contains(test)));
       }
 
       /**
@@ -108,13 +126,21 @@
        */
       filter(selector) {
         if (typeof selector === 'function') {
-          return from(this.toArray().filter(selector));
+          let res = new TjQueryCollection();
+          let total = 0;
+          for (let i = 0; i < this.length; i++) {
+            if (selector(i, this[i])) {
+              res[total++] = this[i];
+            }
+          }
+          res.length = total;
+          return res;
         }
         if (typeof selector === 'string') {
-          return this.filter((elem) => elem.matches(selector));
+          return this.filter((i, elem) => elem.matches(selector));
         }
-        let sel = $(selector);
-        return this.filter((elem) => sel.includes(elem));
+        let sel = selector instanceof TjQueryCollection ? selector : $(selector);
+        return this.filter((i, elem) => sel.includes(elem));
       }
       
       /**
@@ -133,38 +159,82 @@
        * Element.addEventListener()
        * @param {string} events 
        * @param {string} [selector] delegate selector 
-       * @param {function} callback 
-       * @param {Object} [options] addEventListener options.
+       * @param {string} [data] 
+       * @param {function} [callback] 
+       * @param {Object} [options] addEventListener options. If 'true' is provided, then jquery-like .once() is assumed.
        * @returns {this}
        */
       on(events, selector, data, callback, options) {
         let params = parseOnParams(events, selector, data, callback, options);
 
         objectOrProp(params.events, params.callback, (namespace, originalCallback) => {
+          originalCallback = originalCallback === false ? () => false : originalCallback;
           let namespaces = namespace.split(".");
           let ev = namespaces.shift();
 
-          let wrapper = (e) => {
-            if (!params.selector || e.target.matches(params.selector)) {
-              let handlerObj = e;
-              handlerObj.data = params.data;
-              originalCallback(handlerObj);
+          let wrapper = (e, container) => {
+            let elem = e.currentTarget;
+            if(params.selector) {
+              elem = e.target.closest(params.selector);
+              if (elem === e.currentTarget) {
+                elem = null;
+              }
             }
-          };
+            if (!elem || !e.currentTarget.contains(elem)) return;
 
-          this.each((elem) => {
+            let stopImmediate = false;
+            let event = new Event(e.type, e);
+
+            for (let prop in e) {
+              if (typeof e[prop] === 'function') {
+                event[prop] = () => {
+                  switch (prop) {
+                    case 'stopImmediatePropagation':
+                      stopImmediate = true;
+                      break;
+                  }
+                  return e[prop](...arguments)
+                };
+              } else if (typeof event[prop] === 'undefined') {
+                event[prop] = e[prop];
+              }
+            }
+            event.originalEvent = e;
+            if (container && container.options === true) {
+              container.deleteSelf();
+            }
+            if (originalCallback.call(elem, event) === false) {
+              e.stopPropagation();
+              e.preventDefault();
+            }
+            return stopImmediate;
+          }
+
+          this.each((index, elem) => {
             let eventsStore = getStore(elem, 'events', new Map());
 
-            let event = eventsStore.get(ev);
-            if (!event) {
-              event = new Map();
-              eventsStore.set(ev, event);
+            let eventContainer = eventsStore.get(ev);
+            if (!eventContainer) {
+              eventContainer = {
+                isMasterSet: false,
+                master: (e) => {
+                  let stop = false;
+                  eventContainer.allHandlers.forEach((container) => {
+                    if (!stop && (typeof container.options === 'undefined' || container.options === true)) {
+                      stop = container.handler(e, container);
+                    }
+                  });
+                },
+                selectors: new Map(),
+                allHandlers: new Set(),
+              };
+              eventsStore.set(ev, eventContainer);
             }
 
-            let sel = event.get(params.selector);
+            let sel = eventContainer.selectors.get(params.selector);
             if (!sel) {
               sel = new Map();
-              event.set(params.selector, sel);
+              eventContainer.selectors.set(params.selector, sel);
             }
 
             let handlers = sel.get(originalCallback);
@@ -173,13 +243,27 @@
               sel.set(originalCallback, handlers);
             }
 
-            handlers.add({ 
+            let container = { 
+              elem: elem,
+              options: params.options,
               namespaces: namespaces,
               handler: wrapper,
-              originalHandler: originalCallback
-            });
+              originalHandler: originalCallback,
+              deleteSelf: () => {
+                handlers.delete(container);
+                eventContainer.allHandlers.delete(container);
+              },
+            };
 
-            elem.addEventListener(ev, wrapper, params.options);
+            handlers.add(container);
+            eventContainer.allHandlers.add(container);
+
+            if (params.options && params.options !== true) {
+              elem.addEventListener(ev, wrapper, opt);
+            } else if (!eventContainer.isMasterSet) {
+              eventContainer.isMasterSet = true;
+              elem.addEventListener(ev, eventContainer.master);
+            }
           });
         });
 
@@ -188,38 +272,66 @@
       
       /**
        * Element.removeEventListener()
-       * @param {string} events 
-       * @param {function} callback 
+       * @param {string} [events] 
+       * @param {string} [selector] 
+       * @param {function} [callback] 
        * @returns {this}
        */
       off(events, selector, callback) {
         let params = parseOnParams(events, selector, callback);
-        objectOrProp(params.events, params.callback, (namespace, originalCallback) => {
-          let namespaces = namespace.split(".");
-          let ev = namespaces.shift();
-          this.each((elem) => {
-            let eventsStore = getStore(elem, 'events', new Map());
-            let event = eventsStore.get(ev) || new Map();
-            let sel = event.get(params.selector) || new Map();
-            let handlers = sel.get(originalCallback) || new Set();
+
+        let off = (elem, ev, eventStore, namespaces, eventContainer, selectors, handlers) => {
+          if (handlers.size) {
             handlers.forEach((container) => {
               if (namespaces.every((ns) => container.namespaces.includes(ns))) {
-                elem.removeEventListener(ev, container.handler);
-                handlers.delete(container);
-                if (!handlers.size) {
-                  sel.delete(originalCallback);
-                  if(!sel.size) {
-                    event.delete(params.selector);
-                    if (!event.size) {
-                      eventsStore.delete(ev);
-                    }
-                  }
+                if (container.options && container.options !== true) {
+                  elem.removeEventListener(ev, container.handler);
                 }
+                container.deleteSelf();
               }
             });
-            elem.removeEventListener(ev, originalCallback);
+            if(eventContainer.isMasterSet) {
+              let allStandard = true;
+              handlers.forEach((container) => allStandard = allStandard && container.options && container.options !== true);
+              if (allStandard) {
+                eventContainer.isMasterSet = false;
+                elem.removeEventListener(ev, eventContainer.master);
+              }
+            }
+            if (!handlers.size) {
+              selectors.delete(params.selector);
+              if (!selectors.size) {
+                eventStore.delete(ev);
+              }
+            }
+          }
+        }
+
+        if(!objectOrProp(params.events, params.callback, (namespace, originalCallback) => {
+          let namespaces = namespace.split(".");
+          let ev = namespaces.shift();
+          this.each((index, elem) => {
+            let eventStore = getStore(elem, 'events', new Map());
+            let eventContainer = eventStore.get(ev) || {};
+            let selectors = eventContainer.selectors || new Map();
+            let handlers = (selectors.get(params.selector) || new Map()).get(originalCallback) || new Set();
+            off(elem, ev, eventStore, namespaces, eventContainer, selectors, handlers);
           });
-        });
+        }) && (!events || typeof events === 'string')) {
+          let namespaces = (events || "").split(".");
+          let event = namespaces.shift();
+          this.each((index, elem) => {
+            let eventStore = getStore(elem, 'events', new Map());
+            eventStore.forEach((eventContainer, ev) => {
+              if (!events || ev === event) {
+                let selectors = eventContainer.selectors || new Map();
+                (selectors.get(params.selector) || new Map()).forEach((handlers) => {
+                  off(elem, ev, eventStore, namespaces, eventContainer, selectors, handlers);
+                });
+              }
+            })
+          });
+        }
 
         return this;
       }
@@ -230,10 +342,13 @@
        * @param {Object} [extraParams] 
        */
       trigger(eventType, extraParams) {
-        let event = new Event(eventType, extraParams);
-        return this.each((elem) => {
+        extraParams = extraParams || {};
+        let params = Object.assign({bubbles: true, cancelable: true}, extraParams);
+        let event = new Event(eventType, params);
+        this.each((index, elem) => {
           elem.dispatchEvent(event);
         });
+        return this;
       }
 
       /**
@@ -245,9 +360,12 @@
        */
       one(events, selector, data, callback, options) {
         let params = parseOnParams(events, selector, data, callback, options);
-        params.options = params.options || {};
-        params.options.once = true;
-        return this.on(...Object.values(params).filter((param) => param));
+        if (typeof params.options === 'object') {
+          params.options.once = true;
+        } else {
+          params.options = true;
+        }
+        return this.on(...Object.values(params).filter((param) => param || param === 0 || param === false));
       };
       
       /**
@@ -258,9 +376,10 @@
        */
       click(data, callback, options) {
         if (!arguments.length) {
-          return this.each((elem) => {
+          this.each((index, elem) => {
             elem.click();
           });
+          return this;
         }
         
         this
@@ -289,7 +408,7 @@
        */
       ready(callback) {
         if (document.readyState === 'complete') {
-          callback();
+          setTimeout(callback);
         } else {
           $document.one('DOMContentLoaded', callback);
         }
@@ -304,7 +423,7 @@
        */
       attr(key, set) {
         if(objectOrProp(key, set, (k, v) => {
-          this.each((elem) => {
+          this.each((index, elem) => {
             elem.setAttribute(k, v);
           });
         })) return this;
@@ -317,9 +436,10 @@
        * @param {string} key 
        */
       removeAttr(key) {
-        return this.each((elem) => {
+        this.each((index, elem) => {
           elem.removeAttribute(key);
         });
+        return this;
       }
 
       /**
@@ -330,7 +450,7 @@
        */
       prop(key, set) {
         if(objectOrProp(key, set, (k, v) => {
-          this.each((elem) => {
+          this.each((index, elem) => {
               elem[k] = v;
           });
         })) return this;
@@ -408,7 +528,7 @@
        */
       data(key, set) {
         if(objectOrProp(key, set, (k, v) => {
-          this.each((elem) => {
+          this.each((index, elem) => {
             let data = getStore(elem, 'data', {});
             data[k] = v;
           });
@@ -425,7 +545,7 @@
        * @param {string} key 
        */
       removeData(key) {
-        this.each((elem) => {
+        this.each((index, elem) => {
           elem.tjqData = elem.tjqData || {};
           delete elem.tjqData[key];
         });
@@ -491,7 +611,7 @@
        */
       toggleClass(name, force) {
         let nameArr = name.split(' ');
-        this.each((elem) => {
+        this.each((index, elem) => {
           nameArr.forEach((className) => {
             elem.classList.toggle(className, force);
           });
@@ -516,7 +636,7 @@
        */
       once(identifier) {
         identifier = typeof identifier === 'undefined' ? 'once' : identifier;
-        let res = this.filter((elem) => {
+        let res = this.filter((i, elem) => {
           let once = getStore(elem, 'once', new Set());
           if(!once.has(identifier)) {
             once.add(identifier);
@@ -553,7 +673,7 @@
         } else if (typeof selector === 'string') {
           this.some((elem) => elem.matches(selector) || (ind++ && false));
         } else {
-          let sel = $(selector);
+          let sel = selector instanceof TjQueryCollection ? selector : $(selector);
           this.some((elem) => sel.includes(elem) || (ind++ && false));
         }
 
@@ -591,9 +711,9 @@
        * @returns {TjQueryCollection}
        */
       next(selector) {
-        return from(this.map((elem) => elem.nextElementSibling).filter((elem) => {
+        return this.map((i, elem) => elem.nextElementSibling).filter((i, elem) => {
           return elem && (!selector || elem.matches(selector))
-        }));
+        });
       }
 
       /**
@@ -621,9 +741,9 @@
        * @returns {TjQueryCollection}
        */
       prev(selector) {
-        return from(this.map((elem) => elem.previousElementSibling).filter((elem) => {
+        return this.map((i, elem) => elem.previousElementSibling).filter((i, elem) => {
           return elem && (!selector || elem.matches(selector))
-        }));
+        });
       }
 
       /**
@@ -663,7 +783,7 @@
        * @returns {TjQueryCollection}
        */
       children(selector) {
-        return from(propElem(this.map((elem) => elem.firstChild), 'nextElementSibling', selector, true, true));
+        return from(propElem(this.map((i, elem) => elem.firstChild), 'nextElementSibling', selector, true, true));
       }
       
       /**
@@ -673,7 +793,7 @@
        */
       parent(selector) {
         let res = new Set();
-        this.map((elem) => elem.parentNode).forEach((elem) => {
+        this.map((i, elem) => elem.parentNode).each((i, elem) => {
           if(!res.has(elem) && elem instanceof Element && (!selector || elem.matches(selector))) {
             res.add(elem);
           }
@@ -696,7 +816,7 @@
        * @returns {TjQueryCollection}
        */
       closest(selector) {  
-        return $(this.map((elem) => elem.closest(selector)));
+        return $(this.map((i, elem) => elem.closest(selector)));
       }
       
     }
@@ -728,7 +848,7 @@
           if (!context && selectors.length === 1) {
             return sel;
           }
-          sel.forEach((elem) => elems.add(elem));
+          sel.each((i, elem) => elems.add(elem));
         } else if (sel instanceof Element) {
           if (!context && selectors.length === 1) {
             return new TjQueryCollection(sel);
@@ -752,7 +872,7 @@
           if (!context && selectors.length === 1) {
             return from(document.querySelectorAll(sel));
           }
-          c.each((cElem) => {
+          c.each((i ,cElem) => {
             cElem.querySelectorAll(sel).forEach((elem) => elems.add(elem));
           });
           if (selectors.length === 1) {
@@ -765,7 +885,7 @@
             }
           })
         } else {
-          from(sel).forEach((elem) => {
+          from(sel).each((i, elem) => {
             if(elem instanceof Element) {
               elems.add(elem);
             }
@@ -801,22 +921,23 @@
       let res = new Set();
       let cache = new Set();
       let is = (elem, sel) => typeof sel === 'string' ? elem.matches(sel) : elem === sel;
-      (reverse ? collection.slice().reverse() : collection).forEach((elem) => {
-        if (!elem) return;
-        if (cache.has(elem)) return;
+      for (let i = reverse ? collection.length - 1 : 0; reverse ? i >= 0 : i < collection.length; reverse ? i-- : i++) {
+        let elem = collection[i];
+        if (!elem) continue;
+        if (cache.has(elem)) continue;
         cache.add(elem);
         let next = elem[prop];
         if (includeFirst) {
           next = elem;
         }
-        if (!next || (stopAt && is(next, stopAt))) return;
+        if (!next || (stopAt && is(next, stopAt))) continue;
         do {
           if (next instanceof Element && (!selector || next.matches(selector))) {
             res.add(next);
           }
           cache.add(next);
         } while (multiple && next && (next = next[prop]) && !cache.has(next) && (!stopAt || !is(next, stopAt)))
-      });
+      }
 
       return res;
     }
