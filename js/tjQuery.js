@@ -85,12 +85,15 @@
        * @returns {boolean}
        */
       is(selector) {
-        if (typeof selector === "string") {
-          return this.some((elem) => elem.matches(selector));
-        } else {
-          let test = selector instanceof TjQueryCollection ? selector : $(selector);;
-          return this.some((elem) => test.includes(elem));
+        if (typeof selector === 'string') {
+          selector = select(selector, $document);
+          if (typeof selector === 'string') {
+            return this.some((elem) => elem.matches(selector));
+          }
         }
+
+        let sel = (selector instanceof TjQueryCollection ? selector : $(selector)).toSet();
+        return this.some((elem) => sel.has(elem));
       }
       
       /**
@@ -100,10 +103,13 @@
        */
       not(selector) {
         if (typeof selector === 'string') {
-          return this.filter((i, elem) => !elem.matches(selector));
+          selector = select(selector, this, true);
+          if (typeof selector === 'string') {
+            return this.filter((i, elem) => !elem.matches(selector));
+          }
         }
-        let sel = selector instanceof TjQueryCollection ? selector : $(selector);
-        return this.filter((i, elem) => !sel.includes(elem));
+        let sel = (selector instanceof TjQueryCollection ? selector : $(selector)).toSet();
+        return this.filter((i, elem) => !sel.has(elem));
       }
       
       /**
@@ -113,9 +119,13 @@
        */
       has(selector) {
         if (typeof selector === 'string') {
-          return this.filter((i, elem) => elem.querySelector(selector));
+          if (!selector.length) return this;
+          selector = select(selector, this);
+          if (typeof selector === 'string') {
+            return this.filter((i, elem) => elem.querySelector(':scope ' + selector));
+          }
         }
-        let sel = $(selector);
+        let sel = selector instanceof TjQueryCollection ? selector : $(selector);
         return this.filter((i, elem) => sel.some((test) => elem !== test && elem.contains(test)));
       }
 
@@ -134,13 +144,18 @@
             }
           }
           res.length = total;
-          return res;
+          return from(res);
+          return super.filter((elem, i) => selector(i, this[i]));
         }
         if (typeof selector === 'string') {
-          return this.filter((i, elem) => elem.matches(selector));
+          if (!selector.length) return this;
+          selector = select(selector, this, true);
+          if (typeof selector === 'string') {
+            return this.filter((i, elem) => elem.matches(selector));
+          }
         }
-        let sel = selector instanceof TjQueryCollection ? selector : $(selector);
-        return this.filter((i, elem) => sel.includes(elem));
+        let sel = (selector instanceof TjQueryCollection ? selector : $(selector)).toSet();
+        return this.filter((i, elem) => sel.has(elem));
       }
       
       /**
@@ -672,13 +687,17 @@
       index(selector) {
         let ind = 0;
         if (typeof selector === 'undefined') {
-          return this.first().parent().children().indexOf(this.get(0));
+          return this.first().prevAll().length;
         } else if (typeof selector === 'string') {
-          this.some((elem) => elem.matches(selector) || (ind++ && false));
-        } else {
-          let sel = selector instanceof TjQueryCollection ? selector : $(selector);
-          this.some((elem) => sel.includes(elem) || (ind++ && false));
+          selector = select(selector, this);
+          if (typeof selector === 'string') {
+            this.each((elem) => !(elem.matches(selector) || (ind++ || false)));
+            return ind >= this.length ? -1 : ind;
+          }
         }
+
+        let sel = (selector instanceof TjQueryCollection ? selector : $(selector)).toSet();
+        this.each((elem) => !(sel.has(elem) || (ind++ && false)));
 
         return ind >= this.length ? -1 : ind;
       }
@@ -844,7 +863,7 @@
       }
       
       let selectors = selector instanceof Array ? selector : [selector];
-      let c = context ? (context instanceof TjQueryCollection ? context : $(context)) : $document;
+      let $context = context ? (context instanceof TjQueryCollection ? context : $(context)) : $document;
       let elems = new Set();
       let skipFilter = false;
     
@@ -870,18 +889,26 @@
           if (!context && selectors.length === 1) {
             return from(sel);
           }
-          from(sel, Array).forEach((elem) => {
+          from(sel).each((elem) => {
             elems.add(elem);
           });
         } else if (typeof sel === 'string') {
-          if (!context && selectors.length === 1) {
-            return from(document.querySelectorAll(sel));
-          }
-          c.each((i ,cElem) => {
-            cElem.querySelectorAll(sel).forEach((elem) => elems.add(elem));
-          });
-          if (selectors.length === 1) {
-            skipFilter = true;
+          sel = select(sel, $context);
+          if (typeof sel === 'string') {
+            if (!context && selectors.length === 1) {
+              return from(document.querySelectorAll(sel));
+            }
+            $context.each((i, cElem) => {
+              cElem.querySelectorAll(':scope ' + sel).forEach((elem) => elems.add(elem));
+            });
+            if (selectors.length === 1) {
+              skipFilter = true;
+            }
+          } else {
+            if (selectors.length === 1) {
+              return sel;
+            }
+            sel.each((i, elem) => elems.add(elem));
           }
         } else if (sel instanceof Set) {
           sel.forEach((elem) => {
@@ -901,8 +928,8 @@
     
       // Filter within context
       if (context && !skipFilter) {
-        elems = elems.filter((elem) => {
-          return c.some((cont) => cont !== elem && cont.contains(elem));
+        elems = elems.filter((i, elem) => {
+          return $context.some((cont) => cont !== elem && cont.contains(elem));
         });
       }
 
@@ -1047,6 +1074,15 @@
         }
       }
       return {events, selector, data, callback, options};
+    }
+
+    /**
+     * Placeholder function for adding custom selectors.
+     * @param {*} selector 
+     * @param {*} context 
+     */
+    function select(selector, context) {
+      return selector;
     }
 
   })();
