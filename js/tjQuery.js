@@ -197,15 +197,13 @@
             }
             if (!elem || !e.currentTarget.contains(elem)) return;
 
-            let stopImmediate = false;
             let event = new Event(e.type, e);
-
             for (let prop in e) {
               if (typeof e[prop] === 'function') {
                 event[prop] = () => {
                   switch (prop) {
                     case 'stopImmediatePropagation':
-                      stopImmediate = true;
+                      event.immediateStopped  = true;
                       break;
                   }
                   return e[prop](...arguments)
@@ -214,15 +212,18 @@
                 event[prop] = e[prop];
               }
             }
+            event.immediateStopped = false;
             event.originalEvent = e;
+            event.data = params.data;
+            let args = getStore(elem, 'triggerArgs', new Map()).get(ev) || [];
             if (container && container.options === true) {
               container.deleteSelf();
             }
-            if (originalCallback.call(elem, event) === false) {
+            if (originalCallback.call(elem, event, ...args) === false) {
               e.stopPropagation();
               e.preventDefault();
             }
-            return stopImmediate;
+            return event.immediateStopped;
           }
 
           this.each((index, elem) => {
@@ -259,7 +260,6 @@
             }
 
             let container = { 
-              elem: elem,
               options: params.options,
               namespaces: namespaces,
               handler: wrapper,
@@ -268,7 +268,7 @@
                 handlers.delete(container);
                 eventContainer.allHandlers.delete(container);
                 if (!sel.size) {
-                  eventContainer.selectors.delte(params.selector);
+                  eventContainer.selectors.delete(params.selector);
                 }
               },
             };
@@ -298,7 +298,7 @@
       off(events, selector, callback) {
         let params = parseOnParams(events, selector, callback);
 
-        let off = (elem, ev, eventStore, namespaces, eventContainer, selectors, handlers) => {
+        let off = (elem, ev, namespaces, eventContainer, handlers) => {
           if (handlers.size) {
             handlers.forEach((container) => {
               if (namespaces.every((ns) => container.namespaces.includes(ns))) {
@@ -309,17 +309,10 @@
               }
             });
             if(eventContainer.isMasterSet) {
-              let allStandard = true;
-              handlers.forEach((container) => allStandard = allStandard && container.options && container.options !== true);
-              if (allStandard) {
+              let allNative = from(eventContainer.allHandlers, Array).every((container) => container.options && container.options !== true);
+              if (allNative) {
                 eventContainer.isMasterSet = false;
                 elem.removeEventListener(ev, eventContainer.master);
-              }
-            }
-            if (!handlers.size) {
-              selectors.delete(params.selector);
-              if (!selectors.size) {
-                eventStore.delete(ev);
               }
             }
           }
@@ -333,19 +326,25 @@
             let eventContainer = eventStore.get(ev) || {};
             let selectors = eventContainer.selectors || new Map();
             let handlers = (selectors.get(params.selector) || new Map()).get(originalCallback) || new Set();
-            off(elem, ev, eventStore, namespaces, eventContainer, selectors, handlers);
+            off(elem, ev, namespaces, eventContainer, handlers);
           });
         }) && (!events || typeof events === 'string')) {
-          let namespaces = (events || "").split(".");
+          let namespaces = events && events.length ? events.split(".") : [];
           let event = namespaces.shift();
           this.each((index, elem) => {
             let eventStore = getStore(elem, 'events', new Map());
             eventStore.forEach((eventContainer, ev) => {
-              if (!events || ev === event) {
+              if (!event || ev === event) {
                 let selectors = eventContainer.selectors || new Map();
-                (selectors.get(params.selector) || new Map()).forEach((handlers) => {
-                  off(elem, ev, eventStore, namespaces, eventContainer, selectors, handlers);
-                });
+                if (params.selector) {
+                  (selectors.get(params.selector) || new Map()).forEach((handlers) => {
+                    off(elem, ev, namespaces, eventContainer, handlers);
+                  });
+                } else {
+                  let handlers = eventContainer.allHandlers || new Set();
+                  off(elem, ev, namespaces, eventContainer, handlers);
+                }
+                
               }
             })
           });
@@ -360,13 +359,23 @@
        * @param {Object} [extraParams] 
        */
       trigger(eventType, extraParams) {
-        extraParams = extraParams || {};
-        let params = Object.assign({bubbles: true, cancelable: true}, extraParams);
-        let event = new Event(eventType, params);
-        this.each((index, elem) => {
-          elem.dispatchEvent(event);
+        let args = typeof extraParams === 'undefined' ? [] : extraParams instanceof Array ? args : [extraParams];
+        let event = new Event(eventType, {bubbles: true, cancelable: true});
+        setTimeout(() =>{
+          this.each((index, elem) => {
+            let triggerArgsStore = getStore(elem, 'triggerArgs', new Map());
+            triggerArgsStore.set(eventType, args);
+            if (typeof elem[eventType] === 'function') {
+              elem[eventType]();
+            } else if (typeof elem['on' + eventType] === 'function') {
+              elem['on' + eventType]();
+            } else {
+              elem.dispatchEvent(event);
+            }
+            triggerArgsStore.delete(eventType);
+          });
+          return this;
         });
-        return this;
       }
 
       /**
@@ -394,10 +403,7 @@
        */
       click(data, callback, options) {
         if (!arguments.length) {
-          this.each((index, elem) => {
-            elem.click();
-          });
-          return this;
+          return this.trigger('click');
         }
         
         this
@@ -578,8 +584,8 @@
        * @returns {this}
        */
       focus(data, callback, options) {
-        if (!arguments.length && this[0] && typeof this[0].focus === 'function') {
-          this[0].focus();
+        if (!arguments.length) {
+          this.first().trigger('focus');
         } else if (arguments.length) {
           this.on('focus', data, callback, options);
         }
@@ -594,8 +600,8 @@
        * @returns {this}
        */
       blur(data, callback, options) {
-        if (!arguments.length && this[0] && typeof this[0].blur === 'function') {
-          this[0].blur();
+        if (!arguments.length) {
+          this.first().trigger('blur');
         } else if (arguments.length) {
           this.on('blur', data, callback, options);
         }
