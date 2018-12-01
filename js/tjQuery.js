@@ -126,7 +126,7 @@
        */
       filter(selector) {
         if (typeof selector === 'function') {
-          let res = new TjQueryCollection();
+          let res = [];
           let total = 0;
           for (let i = 0; i < this.length; i++) {
             if (selector(i, this[i])) {
@@ -252,6 +252,9 @@
               deleteSelf: () => {
                 handlers.delete(container);
                 eventContainer.allHandlers.delete(container);
+                if (!sel.size) {
+                  eventContainer.selectors.delte(params.selector);
+                }
               },
             };
 
@@ -702,7 +705,8 @@
        * @returns {TjQueryCollection}
        */
       eq(index) {
-        return this.get(index) ? new TjQueryCollection(this.get(index)) : new TjQueryCollection();
+        let elem = this.get(index)
+        return elem  ? new TjQueryCollection(elem) : new TjQueryCollection();
       }
 
       /**
@@ -822,6 +826,7 @@
     }
     
     let $document = new TjQueryCollection(document);
+    let $html = new TjQueryCollection(document.querySelector('html'));
     return $;
     
     /**

@@ -54,6 +54,11 @@
       document.getElementById('dummy').innerHTML = "";
       document.getElementById('dummy').appendChild(dummyContent(divsLevel, divsLevel));
       run();
+      // setTimeout(() => {
+      //   for (let i = 0; i < 50000; i++) {
+      //     tjQuery('span:visible').data('t');
+      //   }
+      // }, 500)
     });
 
     setTimeout(() => {
@@ -69,7 +74,7 @@
       <p class="intro">
         Here are the benchmarks comparing tjQuery to jQuery (3.3.1) for the supported 
         methods. Tests are run on a series of alternating divs and spans with 5 nesting 
-        levels with 6 children each (6^5 divs and spans).
+        levels with 5 children each (5^5 divs and spans).
         <select id="benchmark">
             <option value="1">1 div, 10,000 iterations</option>
             <option value="2">4 divs, 5,000 iterations</option>
@@ -95,7 +100,7 @@
       </table>
   </span>
 
-  <comtainer id="dummy" style="display: none"></comtainer>
+  <container id="dummy" style="display: none"></container>
 
   
   <script>
@@ -113,18 +118,19 @@
         "$divs.toArray()",
         "$divs.add('span')",
         "$divs.each((e) => 1)",
-        // "$divs.forEach((e) => 1)",
         "$divs.is('span')",
         "$divs.not('span')",
         "$divs.has('span')",
+        "$divs.map((e) => 1)",
         "$divs.filter('span')",
         "$divs.find('span')",
         "$divs.on('touchend', dummyFunc)",
-        "$divs.off('touchend', dummyFunc)",
         "$divs.one('touchend', dummyFunc)",
         "$divs.trigger('click')",
         "$divs.click((e) => 1)",
         "$divs.ready((e) => 1)",
+        "$divs.off()",
+        "$divs.click()",
         "$divs.attr('data-t', '1')",
         "$divs.attr('data-t')",
         "$divs.removeAttr('data-t')",
@@ -241,11 +247,13 @@
         tjqTotal += tjqTime;
 
         let pass = $tjqDivs.b === $jqDivs.b;
+        // console.log($tjqDivs.b)
+        // console.log($jqDivs.b)
         if ($tjqDivs.b instanceof Array) {
           pass = $tjqDivs.b.length === $jqDivs.b.length;
           let i = 0;
-          let res = $($jqDivs.b);
-          pass = pass && $tjqDivs.b.every((elem) => res.is(elem));
+          let res = Array.from($jqDivs.b);
+          pass = pass && $tjqDivs.b.every((elem) => res.includes(elem));
           i = 0;
           // $jqDivs.b.each((i, elem) => { if($tjqDivs.b[i++] !== elem) throw elem });
           // pass = $tjqDivs.b.length + " " + $jqDivs.b.length;
@@ -288,8 +296,8 @@
         tr.appendChild(td);
 
         td = document.createElement('td');
-        // td.textContent = pass ? "PASS" : "FAIL";
-        td.textContent = pass;
+        td.textContent = pass ? "PASS" : "FAIL";
+        // td.textContent = pass;
         tr.appendChild(td);
 
         document.getElementById('results').appendChild(tr);
