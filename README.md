@@ -14,12 +14,14 @@ Tiny jQuery is an ES6 based, stripped down jQuery to the most used bits, with al
 - Dot chaining
 
 ## The Solution
-Tiny jQuery (**tjQuery**) is 3.5kb in size (gzipped) and was made to take out all the bad / unneeded bits from jQuery, and keep DOM traversal, basic and native event handling, and attribute manipulation. The result is pure syntactic sugar, which is what we love about jQuery to begin with.
+Tiny jQuery (**tjQuery**) is 3.5kb in size (gzipped), x4 times faster, and was made to take out all the bad / unneeded bits from jQuery, and keep DOM traversal, event handling, and attribute manipulation. The result is pure syntactic sugar, which is what we love about jQuery to begin with.
 
-Additionally, [jQuery Once](https://github.com/RobLoach/jquery-once) functionality is included, and the `.click()` method has been modified to turn the element accessibility friendly by adding `tabindex` and keyboard `enter` behavior.
+Additionally, [jQuery Once](https://github.com/RobLoach/jquery-once) functionality is included, and the `.click()` method has been modified to turn the element accessibility friendly by adding `tabindex`, aria `role`, and keyboard `enter` behavior.
 
 ## Supported methods
 - All of `Array()`'s methods
+- All of `jQuery()`'s event alias methods (`.keyup()`, `.mousemove()`, etc)
+- `.map()`
 - `.toArray()`
 - `.each()`
 - `.add()`
@@ -34,6 +36,7 @@ Additionally, [jQuery Once](https://github.com/RobLoach/jquery-once) functionali
 - `.one()`
 - `.click()`
 - `.ready()`
+- `.hover()`
 - `.attr()`
 - `.removeAttr()`
 - `.prop()`
@@ -44,18 +47,15 @@ Additionally, [jQuery Once](https://github.com/RobLoach/jquery-once) functionali
 - `.label()`
 - `.data()`
 - `.removeData()`
-- `.focus()`
-- `.blur()`
 - `.addClass()`
 - `.removeClass()`
 - `.toggleClass()`
 - `.hasClass()`
-- `.once()`
 - `.get()`
 - `.index()`
-- `.eq()`
 - `.first()`
 - `.last()`
+- `.eq()`
 - `.next()`
 - `.nextUntil()`
 - `.nextAll()`
@@ -67,3 +67,9 @@ Additionally, [jQuery Once](https://github.com/RobLoach/jquery-once) functionali
 - `.parent()`
 - `.parents()`
 - `.closest()`
+
+# Extra methods
+- `.unique()`
+- `.toSet()`
+- `.label()`
+- `.once()`
