@@ -8,20 +8,34 @@
    * })(tjQuery)
    */
 
-  const tjQuery = (() => {
+    /**
+     * tjQuery collection of Elements with mimicked jQuery api.
+     * @class TjQueryCollection
+     * @extends Array
+     */
+  const TjQueryCollection = (() => {
     "use strict";
 
+    /**
+     * Storage holding element related data that will self delete when
+     * the element no longer exists.
+     */
     let elementStorage = new WeakMap();
 
+    /**
+     * tjQuery collection of Elements with mimicked jQuery api.
+     * @class TjQueryCollection
+     * @extends Array
+     */
     class TjQueryCollection extends Array {
       
       /**
        * TjQueryCollection constructor.
        * @constructor
-       * @param {...Element} items 
+       * @param {...Element|number} items 
        */
-      constructor() {
-          super(...arguments);
+      constructor(...items) {
+          super(...items);
       }
       
       /**
@@ -845,101 +859,104 @@
       closest(selector) {  
         return $(this.map((i, elem) => elem.closest(selector)));
       }
-      
-    }
-    
-    let $document = new TjQueryCollection(document);
-    let $html = new TjQueryCollection(document.querySelector('html'));
-    return $;
-    
-    /**
-     * Query function to get elements
-     * @param {*} selector 
-     * @param {*} context 
-     * @returns {TjQueryCollection}
-     */
-    function $(selector, context) {
-      if (!selector) return new TjQueryCollection();
-      if (!context && selector === document) return new TjQueryCollection(document);
-      if (typeof selector === 'function') {
-        $document.ready(selector);
-        return new TjQueryCollection();
-      }
-      
-      let selectors = selector instanceof Array ? selector : [selector];
-      let $context = context ? (context instanceof TjQueryCollection ? context : $(context)) : $document;
-      let elems = new Set();
-      let skipFilter = false;
-    
-      for (let sel of selectors) {
-        if (sel instanceof TjQueryCollection) {
-          if (!context && selectors.length === 1) {
-            return sel;
-          }
-          sel.each((i, elem) => elems.add(elem));
-        } else if (sel instanceof Element) {
-          if (!context && selectors.length === 1) {
-            return new TjQueryCollection(sel);
-          }
-          elems.add(sel)
-        }  else if (sel instanceof NodeList) {
-          for(let i = 0; i < sel.length; i++) {
-            let elem = sel[i];
-            if (elem instanceof Element) {
-              elems.add(elem);
-            }
-          }
-        } else if (sel instanceof HTMLCollection) {
-          if (!context && selectors.length === 1) {
-            return from(sel);
-          }
-          from(sel).each((elem) => {
-            elems.add(elem);
-          });
-        } else if (typeof sel === 'string') {
-          sel = select(sel, $context);
-          if (typeof sel === 'string') {
-            if (!context && selectors.length === 1) {
-              return from(document.querySelectorAll(sel));
-            }
-            $context.each((i, cElem) => {
-              cElem.querySelectorAll(':scope ' + sel).forEach((elem) => elems.add(elem));
-            });
-            if (selectors.length === 1) {
-              skipFilter = true;
-            }
-          } else {
-            if (selectors.length === 1) {
-              return sel;
-            }
-            sel.each((i, elem) => elems.add(elem));
-          }
-        } else if (sel instanceof Set) {
-          sel.forEach((elem) => {
-            if(elem instanceof Element) {
-              elems.add(elem);
-            }
-          })
-        } else {
-          from(sel).each((i, elem) => {
-            if(elem instanceof Element) {
-              elems.add(elem);
-            }
-          })
-        }
-      }
-      elems = from(elems);
-    
-      // Filter within context
-      if (context && !skipFilter) {
-        elems = elems.filter((i, elem) => {
-          return $context.some((cont) => cont !== elem && cont.contains(elem));
-        });
-      }
 
       /**
-       * Test
+       * Query function to get elements
+       * @param {*} selector 
+       * @param {*} context 
+       * @returns {TjQueryCollection}
        */
+      static select(selector, context) {
+        if (!selector) return new TjQueryCollection();
+        if (!context && selector === document) return new TjQueryCollection(document);
+        if (!context && selector instanceof Element) return new TjQueryCollection(selector);
+        if (!context && selector instanceof TjQueryCollection) return selector.filter().unique().sort();
+        if (typeof selector === 'function') {
+          $document.ready(selector);
+          return new TjQueryCollection();
+        }
+        
+        let selectors = Array.prototype.isPrototypeOf(selector) ? selector : [selector];
+        let $context = context ? (context instanceof TjQueryCollection ? context : $(context)) : $document;
+        let elems = new Set();
+        let doFilter = !!context;
+        let doSort = selectors.length > 1;
+      
+        for (let sel of selectors) {
+          if (sel instanceof TjQueryCollection) {
+            sel.each((i, elem) => {
+              if (elem instanceof Element) elems.add(elem);
+            });
+          } else if (sel instanceof Element) {
+            if (!context && selectors.length === 1) {
+              return new TjQueryCollection(sel);
+            }
+            elems.add(sel)
+          }  else if (sel instanceof NodeList) {
+            for(let i = 0; i < sel.length; i++) {
+              let elem = sel[i];
+              if (elem instanceof Element) {
+                elems.add(elem);
+              }
+            }
+          } else if (sel instanceof HTMLCollection) {
+            if (!context && selectors.length === 1) {
+              return from(sel);
+            }
+            from(sel).each((elem) => {
+              elems.add(elem);
+            });
+          } else if (typeof sel === 'string') {
+            sel = select(sel, $context);
+            if (typeof sel === 'string') {
+              if (!context && selectors.length === 1) {
+                return from(document.querySelectorAll(sel));
+              }
+              $context.each((i, cElem) => {
+                cElem.querySelectorAll(':scope ' + sel).forEach((elem) => elems.add(elem));
+              });
+              if (selectors.length === 1) {
+                doFilter = false;
+                doSort = false;
+              }
+            } else {
+              if (selectors.length === 1) {
+                return sel;
+              }
+              sel.each((i, elem) => elems.add(elem));
+            }
+          } else if (sel instanceof Set) {
+            sel.forEach((elem) => {
+              if(elem instanceof Element) {
+                elems.add(elem);
+              }
+            })
+          } else {
+            from(sel).each((i, elem) => {
+              if(elem instanceof Element) {
+                elems.add(elem);
+              }
+            })
+          }
+        }
+  
+        elems = from(elems);
+      
+        // Filter within context
+        if (doFilter) {
+          elems = elems.filter((i, elem) => {
+            return $context.some((cont) => cont !== elem && cont.contains(elem));
+          });
+        }
+  
+        // Sort by apppearance
+        if (doSort) {
+          elems = elems.sort();
+        }
+  
+        return elems;
+      }
+
     }
 
     /**
@@ -988,8 +1005,10 @@
         return this;
       }
 
-      return elems;
-    }
+      TjQueryCollection.prototype[ev] = event;
+    });
+
+    return TjQueryCollection;
 
     /**
      * Get element from another element's property recursively, filtered by selector.
@@ -1119,11 +1138,14 @@
 
     /**
      * Placeholder function for adding custom selectors.
-     * @param {*} selector 
-     * @param {*} context 
+     * @param {string} selector 
+     * @param {TjQueryCollection} [context] 
+     * @param {boolean} [filterParents] 
      */
-    function select(selector, context) {
+    function select(selector, context, filterByParents) {
       return selector;
     }
 
   })();
+  
+  const tjQuery = TjQueryCollection.select;
