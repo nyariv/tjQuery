@@ -38,6 +38,29 @@
       }
 
       /**
+       * Array.sort()
+       * @param {function} callback 
+       */
+      sort(callback) {
+        if(!callback) return super.sort((a, b) => {
+          if( a === b) return 0;
+          if( a.compareDocumentPosition(b) & 10) {
+              // b comes before a
+              return 1;
+          }
+          return -1;
+        });
+        return super.sort(callback);
+      }
+
+      /**
+       * Remove any duplicate elements.
+       */
+      unique() {
+        return from(this.toSet());
+      }
+
+      /**
        * Convert to Array.
        * @returns {Array}
        */
@@ -64,7 +87,7 @@
         let cont = true;
         for (let i = 0; cont && i < this.length; i++) {
           let elem = this[i];
-          cont = callback.call(this[i], i ,this[i]) !== false;
+          cont = callback.call(elem, i, elem) !== false;
         }
         return this;
       }
@@ -85,11 +108,9 @@
        * @returns {boolean}
        */
       is(selector) {
+        selector = select(selector);
         if (typeof selector === 'string') {
-          selector = select(selector, $document);
-          if (typeof selector === 'string') {
-            return this.some((elem) => elem.matches(selector));
-          }
+          return this.some((elem) => elem.matches(selector));
         }
 
         let sel = (selector instanceof TjQueryCollection ? selector : $(selector)).toSet();
@@ -102,11 +123,9 @@
        * @returns {TjQueryCollection}
        */
       not(selector) {
+        selector = select(selector, this, true);
         if (typeof selector === 'string') {
-          selector = select(selector, this, true);
-          if (typeof selector === 'string') {
-            return this.filter((i, elem) => !elem.matches(selector));
-          }
+          return this.filter((i, elem) => !elem.matches(selector));
         }
         let sel = (selector instanceof TjQueryCollection ? selector : $(selector)).toSet();
         return this.filter((i, elem) => !sel.has(elem));
@@ -118,12 +137,9 @@
        * @returns {TjQueryCollection}
        */
       has(selector) {
+        selector = select(selector, this);
         if (typeof selector === 'string') {
-          if (!selector.length) return this;
-          selector = select(selector, this);
-          if (typeof selector === 'string') {
-            return this.filter((i, elem) => elem.querySelector(':scope ' + selector));
-          }
+          return this.filter((i, elem) => elem.querySelector(':scope ' + selector));
         }
         let sel = selector instanceof TjQueryCollection ? selector : $(selector);
         return this.filter((i, elem) => sel.some((test) => elem !== test && elem.contains(test)));
@@ -131,28 +147,23 @@
 
       /**
        * Filter elements that match selector, or Array.filter() if selector is a function.
-       * @param {*} selector
+       * @param {*} [selector]
        * @returns {TjQueryCollection}
        */
       filter(selector) {
+        if (!selector) return super.filter((elem) => elem instanceof Element);
         if (typeof selector === 'function') {
-          let res = [];
-          let total = 0;
-          for (let i = 0; i < this.length; i++) {
-            if (selector(i, this[i])) {
-              res[total++] = this[i];
+          let res = new TjQueryCollection();
+          this.each((i, elem) => {
+            if (selector(i, elem)) {
+              res.push(elem);
             }
-          }
-          res.length = total;
-          return from(res);
-          return super.filter((elem, i) => selector(i, this[i]));
+          });
+          return res;
         }
+        selector = select(selector, this, true);
         if (typeof selector === 'string') {
-          if (!selector.length) return this;
-          selector = select(selector, this, true);
-          if (typeof selector === 'string') {
-            return this.filter((i, elem) => elem.matches(selector));
-          }
+          return this.filter((i, elem) => elem.matches(selector));
         }
         let sel = (selector instanceof TjQueryCollection ? selector : $(selector)).toSet();
         return this.filter((i, elem) => sel.has(elem));
@@ -184,6 +195,8 @@
 
         objectOrProp(params.events, params.callback, (namespace, originalCallback) => {
           originalCallback = originalCallback === false ? () => false : originalCallback;
+          if (typeof originalCallback !== 'function') return;
+
           let namespaces = namespace.split(".");
           let ev = namespaces.shift();
 
@@ -286,7 +299,7 @@
         });
 
         return this;
-      };
+      }
       
       /**
        * Element.removeEventListener()
@@ -361,21 +374,19 @@
       trigger(eventType, extraParams) {
         let args = typeof extraParams === 'undefined' ? [] : extraParams instanceof Array ? args : [extraParams];
         let event = new Event(eventType, {bubbles: true, cancelable: true});
-        setTimeout(() =>{
-          this.each((index, elem) => {
-            let triggerArgsStore = getStore(elem, 'triggerArgs', new Map());
-            triggerArgsStore.set(eventType, args);
-            if (typeof elem[eventType] === 'function') {
-              elem[eventType]();
-            } else if (typeof elem['on' + eventType] === 'function') {
-              elem['on' + eventType]();
-            } else {
-              elem.dispatchEvent(event);
-            }
-            triggerArgsStore.delete(eventType);
-          });
-          return this;
+        this.each((index, elem) => {
+          let triggerArgsStore = getStore(elem, 'triggerArgs', new Map());
+          triggerArgsStore.set(eventType, args);
+          if (typeof elem[eventType] === 'function') {
+            elem[eventType]();
+          } else if (typeof elem['on' + eventType] === 'function') {
+            elem['on' + eventType]();
+          } else {
+            elem.dispatchEvent(event);
+          }
+          triggerArgsStore.delete(eventType);
         });
+        return this;
       }
 
       /**
@@ -393,7 +404,7 @@
           params.options = true;
         }
         return this.on(...Object.values(params).filter((param) => param || param === 0 || param === false));
-      };
+      }
       
       /**
        * .on('click') alias. Adds accesibility support.
@@ -438,6 +449,16 @@
         }
         return this;
       }
+
+      /**
+       * Triggeer on mouseenter and mouseleave
+       * @param {function} handlerIn 
+       * @param {function} [handlerOut] 
+       */
+      hover(handlerIn, handlerOut) {
+        return this.mouseenter(handlerIn).mouseleave(handlerOut);
+      }
+      
       
       /**
        * Element.getAttribute()/setAttribute()
@@ -480,6 +501,17 @@
         })) return this;
 
         return this[0] ? this[0][key] : null;
+      }
+
+      /**
+       * Remove element property.
+       * @param {string} prop 
+       */
+      removeProp(prop) {
+        this.each((index, elem) => {
+            delete elem[prop];
+        });
+        return this;
       }
       
       /**
@@ -570,41 +602,9 @@
        */
       removeData(key) {
         this.each((index, elem) => {
-          elem.tjqData = elem.tjqData || {};
-          delete elem.tjqData[key];
+          let data = getStore(elem, 'data', {});
+          delete data[key];
         });
-
-        return this;
-      }
-      
-      /**
-       * Element.focus()
-       * @param {function} [callback] 
-       * @param {Object} [options] addEventListener options.
-       * @returns {this}
-       */
-      focus(data, callback, options) {
-        if (!arguments.length) {
-          this.first().trigger('focus');
-        } else if (arguments.length) {
-          this.on('focus', data, callback, options);
-        }
-
-        return this;
-      }
-      
-      /**
-       * Element.focus()
-       * @param {function} [callback] 
-       * @param {Object} [options] addEventListener options.
-       * @returns {this}
-       */
-      blur(data, callback, options) {
-        if (!arguments.length) {
-          this.first().trigger('blur');
-        } else if (arguments.length) {
-          this.on('blur', data, callback, options);
-        }
 
         return this;
       }
@@ -691,15 +691,13 @@
        * @returns {number}
        */
       index(selector) {
+        selector = select(selector, this, true);
         let ind = 0;
         if (typeof selector === 'undefined') {
           return this.first().prevAll().length;
         } else if (typeof selector === 'string') {
-          selector = select(selector, this);
-          if (typeof selector === 'string') {
-            this.each((elem) => !(elem.matches(selector) || (ind++ || false)));
-            return ind >= this.length ? -1 : ind;
-          }
+          this.each((elem) => !(elem.matches(selector) || (ind++ || false)));
+          return ind >= this.length ? -1 : ind;
         }
 
         let sel = (selector instanceof TjQueryCollection ? selector : $(selector)).toSet();
@@ -939,9 +937,55 @@
         });
       }
 
-      // Sort by apppearance
-      if (selectors.length > 1) {
-        elems = elems.sort(sort);
+      /**
+       * Test
+       */
+    }
+
+    /**
+     * Document singleton.
+     */
+    let $document = new TjQueryCollection(document);
+
+    /**
+     * The query selector function.
+     */
+    let $ = TjQueryCollection.select;
+
+    ['blur',
+    'change',
+    'contextmenu',
+    'dblclick',
+    'focus',
+    'focusin',
+    'focusout',
+    'keydown',
+    'keypress',
+    'keyup',
+    'mousedown',
+    'mouseenter',
+    'mouseleave',
+    'mousemove',
+    'mouseover',
+    'mouseup',
+    'mouseout',
+    'resize',
+    'scroll',
+    'select',
+    'submit'].forEach((ev) => {
+      /**
+       * @param {string} [data] 
+       * @param {function} [callback] 
+       * @param {Object} [options] addEventListener options. If 'true' is provided, then jquery-like .once() is assumed.
+       * @returns {TjQueryCollection}
+       */
+      function event(data, callback, options) {
+        if (arguments.length === 0) {
+          this.first().trigger(ev);
+        } else {
+          this.on(ev, null, ...arguments);
+        }
+        return this;
       }
 
       return elems;
@@ -958,7 +1002,7 @@
     function propElem(collection, prop, selector, multiple, includeFirst, stopAt, reverse) {
       let res = new Set();
       let cache = new Set();
-      let is = (elem, sel) => typeof sel === 'string' ? elem.matches(sel) : elem === sel;
+      let is = (elem, sel) => elem instanceof Element && (typeof sel === 'string' ? elem.matches(sel) : (!sel || elem === sel));
       for (let i = reverse ? collection.length - 1 : 0; reverse ? i >= 0 : i < collection.length; reverse ? i-- : i++) {
         let elem = collection[i];
         if (!elem) continue;
@@ -970,7 +1014,7 @@
         }
         if (!next || (stopAt && is(next, stopAt))) continue;
         do {
-          if (next instanceof Element && (!selector || next.matches(selector))) {
+          if (is(next, selector)) {
             res.add(next);
           }
           cache.add(next);
@@ -1030,15 +1074,6 @@
         return arr;
       }
       return Class.from(object);
-    }
-    
-    function sort(a, b) {
-      if( a === b) return 0;
-      if( a.compareDocumentPosition(b) & 10) {
-          // b comes before a
-          return 1;
-      }
-      return -1;
     }
 
     function getStore(elem, store, defaultValue) {
