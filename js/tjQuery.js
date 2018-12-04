@@ -219,11 +219,13 @@ const TjQueryCollection = (() => {
      * @param {string} [selector] delegate selector 
      * @param {string} [data] 
      * @param {function} [callback] 
-     * @param {Object} [options] addEventListener options. If 'true' is provided, then jquery-like .once() is assumed.
+     * @param {Object} [options] addEventListener options. If 'true' is provided, then jquery-like .one() is assumed.
      * @returns {this}
      */
     on(events, selector, data, callback, options) {
       let params = parseOnParams(events, selector, data, callback, options);
+      params.selector = params.selector || null;
+      params.options = params.options || false;
 
       objectOrProp(params.events, params.callback, (namespace, originalCallback) => {
         originalCallback = originalCallback === false ? () => false : originalCallback;
@@ -232,60 +234,67 @@ const TjQueryCollection = (() => {
         let namespaces = namespace.split(".");
         let ev = namespaces.shift();
 
-        let wrapper = (e, container) => {
-          let elem = e.currentTarget;
-          if(params.selector) {
-            elem = e.target.closest(params.selector);
-            if (elem === e.currentTarget) {
-              elem = null;
-            }
-          }
-          if (!elem || !e.currentTarget.contains(elem)) return;
-
-          let event = new Event(e.type, e);
-          for (let prop in e) {
-            if (typeof e[prop] === 'function') {
-              event[prop] = () => {
-                switch (prop) {
-                  case 'stopImmediatePropagation':
-                    event.immediateStopped  = true;
-                    break;
-                }
-                return e[prop](...arguments)
-              };
-            } else if (typeof event[prop] === 'undefined') {
-              event[prop] = e[prop];
-            }
-          }
-          event.immediateStopped = false;
-          event.originalEvent = e;
-          event.data = params.data;
-          let args = getStore(elem, 'triggerArgs', new Map()).get(ev) || [];
-          if (container && container.options === true) {
-            container.deleteSelf();
-          }
-          if (originalCallback.call(elem, event, ...args) === false) {
-            e.stopPropagation();
-            e.preventDefault();
-          }
-          return event.immediateStopped;
-        }
-
         this.each((index, elem) => {
           let eventsStore = getStore(elem, 'events', new Map());
-
           let eventContainer = eventsStore.get(ev);
+
+          let wrapper = (e) => {
+            let args = getStore(e.target, 'triggerArgs', new Map()).get(ev) || [];
+            let stop = false;
+            let event = new TjqEvent(e);
+            if (typeof params.options === 'boolean') {
+              let elem;
+              eventContainer.allHandlers.forEach((container) => {
+                if(typeof container.options === 'boolean' && !event.isImmediatePropagationStopped() && (elem = getEventElem(e, container.selector))) {
+                  let newEvent = Object.create(event);
+                  newEvent.data = container.data;
+                  newEvent.currentTarget = elem;
+                  newEvent.handleObj = {
+                    data: container.data,
+                    handler: container.originalHandler,
+                    namespace: container.namespaces.join('.'),
+                    origType: ev,
+                    type: ev
+                  }
+                  if (container.options) {
+                    container.deleteSelf();
+                  }
+                  stop = (event.result = container.originalHandler.call(elem, newEvent, ...args)) === false || stop;
+                }
+              });
+            } else {
+              let elem = getEventElem(e, container.selector);
+              event.data = container.data;
+              event.currentTarget = elem;
+              event.handleObj = {
+                data: container.data,
+                handler: container.originalHandler,
+                namespace: container.namespaces.join('.'),
+                origType: ev,
+                type: ev
+              }
+              if (!elem) {
+                if (param.options.once) {
+                  setTimeout(() => elem.addEventListener(ev, wrapper, params.options));
+                }
+                return;
+              };
+              if (params.options.once) {
+                container.deleteSelf();
+              }
+              stop = originalCallback.call(elem, event, ...args) === false;
+            }
+
+            if (stop) {
+              event.stopPropagation();
+              event.preventDefault();
+            }
+          }
+
           if (!eventContainer) {
             eventContainer = {
               isMasterSet: false,
-              master: (e) => {
-                let stop = false;
-                eventContainer.allHandlers.forEach((container) => {
-                  if (!stop && (typeof container.options === 'undefined' || container.options === true)) {
-                    stop = container.handler(e, container);
-                  }
-                });
-              },
+              master: wrapper,
               selectors: new Map(),
               allHandlers: new Set(),
             };
@@ -304,10 +313,13 @@ const TjQueryCollection = (() => {
             sel.set(originalCallback, handlers);
           }
 
-          let container = { 
+          let container = {
+            eventType: ev,
             options: params.options,
             namespaces: namespaces,
-            handler: wrapper,
+            selector: params.selector,
+            data: params.data,
+            handler: typeof params.options !== 'boolean' ? wrapper : null,
             originalHandler: originalCallback,
             deleteSelf: () => {
               handlers.delete(container);
@@ -321,11 +333,11 @@ const TjQueryCollection = (() => {
           handlers.add(container);
           eventContainer.allHandlers.add(container);
 
-          if (params.options && params.options !== true) {
-            elem.addEventListener(ev, wrapper, opt);
+          if (typeof params.options !== 'boolean') {
+            elem.addEventListener(ev, wrapper, params.options);
           } else if (!eventContainer.isMasterSet) {
             eventContainer.isMasterSet = true;
-            elem.addEventListener(ev, eventContainer.master);
+            elem.addEventListener(ev, wrapper);
           }
         });
       });
@@ -347,14 +359,14 @@ const TjQueryCollection = (() => {
         if (handlers.size) {
           handlers.forEach((container) => {
             if (namespaces.every((ns) => container.namespaces.includes(ns))) {
-              if (container.options && container.options !== true) {
+              if (container.handler) {
                 elem.removeEventListener(ev, container.handler);
               }
               container.deleteSelf();
             }
           });
           if(eventContainer.isMasterSet) {
-            let allNative = from(eventContainer.allHandlers, Array).every((container) => container.options && container.options !== true);
+            let allNative = from(eventContainer.allHandlers, Array).every((container) => typeof container.options !== 'boolean');  
             if (allNative) {
               eventContainer.isMasterSet = false;
               elem.removeEventListener(ev, eventContainer.master);
@@ -379,7 +391,7 @@ const TjQueryCollection = (() => {
         this.each((index, elem) => {
           let eventStore = getStore(elem, 'events', new Map());
           eventStore.forEach((eventContainer, ev) => {
-            if (!event || ev === event) {
+            if (!events || ev === event) {
               let selectors = eventContainer.selectors || new Map();
               if (params.selector) {
                 (selectors.get(params.selector) || new Map()).forEach((handlers) => {
@@ -405,14 +417,12 @@ const TjQueryCollection = (() => {
      */
     trigger(eventType, extraParams) {
       let args = typeof extraParams === 'undefined' ? [] : extraParams instanceof Array ? args : [extraParams];
-      let event = new Event(eventType, {bubbles: true, cancelable: true});
+      let event = typeof eventType === 'object' ? eventType : new Event(eventType, {bubbles: true, cancelable: true});
       this.each((index, elem) => {
         let triggerArgsStore = getStore(elem, 'triggerArgs', new Map());
         triggerArgsStore.set(eventType, args);
         if (typeof elem[eventType] === 'function') {
           elem[eventType]();
-        } else if (typeof elem['on' + eventType] === 'function') {
-          elem['on' + eventType]();
         } else {
           elem.dispatchEvent(event);
         }
@@ -435,7 +445,7 @@ const TjQueryCollection = (() => {
       } else {
         params.options = true;
       }
-      return this.on(...Object.values(params).filter((param) => param || param === 0 || param === false));
+      return this.on(...Object.values(params).filter((param) => typeof param !== 'undefined'));
     }
     
     /**
@@ -1018,9 +1028,53 @@ const TjQueryCollection = (() => {
       }
       return this;
     }
-
     TjQueryCollection.prototype[ev] = event;
   });
+
+  class TjqEvent {
+    constructor(e) {
+      let immediateStopped = false;
+      let propagationStopped = false;
+      
+      this['originalEvent'] = e;
+      this['delegateTarget'] = e.currentTarget;
+      this['isImmediatePropagationStopped'] = () => immediateStopped;
+      this['isPropagationStopped'] = () => propagationStopped;
+      this['isDefaultPrevented'] = () => e.defaultPrevented;
+      
+      let props = {};
+      for (let prop in e) {
+        if (prop === 'currentTarget') continue;
+        switch (prop) {
+          default:
+            if (typeof e[prop] === 'function') {
+              props[prop] = {get: () => () => {
+                  switch (prop) {
+                    case 'stopImmediatePropagation':
+                      immediateStopped  = true;
+                      break;
+                    case 'stopPropagation':
+                      propagationStopped  = true;
+                      break;
+                  }
+                  return e[prop](...arguments)
+                }
+              }
+            } else {
+              props[prop] = {
+                get: () => {
+                  return e[prop];
+                },
+                set: (val) => {
+                  return e[prop] = val;
+                }
+              }
+            }
+        }
+      }
+      Object.defineProperties(this, props);
+    }
+  }
 
   return TjQueryCollection;
 
@@ -1070,7 +1124,7 @@ const TjQueryCollection = (() => {
     if (typeof name === 'string' && typeof set !== 'undefined') {
       wasSet = true;
       name.split(' ').forEach((n) => res[n] = set);
-    } else if (typeof name === 'object') {
+    } else if (name && typeof name === 'object') {
       wasSet = true;
       res = name;
     }
@@ -1127,14 +1181,14 @@ const TjQueryCollection = (() => {
       options = callback
       callback = undefined;
       // (events, data, options)
-      if (typeof selector !== 'string') {
+      if (typeof selector !== 'string' && selector !== null) {
         options = data;
         data = selector;
         selector = undefined;
       }
     } else {
       // (events, data, callback, options)
-      if (typeof selector !== 'string') {
+      if (typeof selector !== 'string' && selector !== null) {
         options = callback;
         callback = data;
         data = selector;
@@ -1147,6 +1201,17 @@ const TjQueryCollection = (() => {
       }
     }
     return {events, selector, data, callback, options};
+  }
+
+  function getEventElem(e, selector) {
+    let elem = e.currentTarget;
+    if(selector) {
+      elem = e.target.closest(selector);
+      if (elem === e.currentTarget) {
+        elem = null;
+      }
+    }
+    return elem && e.currentTarget.contains(elem) ? elem : null;
   }
 
   /**
