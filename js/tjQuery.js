@@ -28,14 +28,32 @@ const TjQueryCollection = (() => {
    * @extends Array
    */
   class TjQueryCollection extends Array {
-    
+
     /**
      * TjQueryCollection constructor.
      * @constructor
      * @param {...Element|number} items 
      */
     constructor(...items) {
-        super(...items);
+      super(...items);
+    }
+
+    /**
+     * Query selector shortcut.
+     */
+    get $() {
+      return this.constructor.select.bind(this.constructor);
+    }
+    
+    get $document()  {
+      return this.constructor.$document;
+    }
+
+    /**
+     * Document singleton.
+     */
+    static get $document()  {
+      return this['#document'] = this['#document'] || new this(document);
     }
     
     /**
@@ -44,7 +62,7 @@ const TjQueryCollection = (() => {
      * @returns {Array}
      */
     map(callback) {
-      let res = new TjQueryCollection(this.length);
+      let res = new this.constructor(this.length);
       for(let i = 0; i < this.length; i++) {
         res[i] = callback(i, this[i]);
       }
@@ -71,7 +89,7 @@ const TjQueryCollection = (() => {
      * Remove any duplicate elements.
      */
     unique() {
-      return from(this.toSet());
+      return from(this.toSet(), this.constructor);
     }
 
     /**
@@ -113,7 +131,7 @@ const TjQueryCollection = (() => {
      * @returns {TjQueryCollection}
      */
     add(selector, context) {
-      return $([this, $(selector, context)]);
+      return this.$([this, this.$(selector, context)]);
     }
     
     /**
@@ -127,7 +145,7 @@ const TjQueryCollection = (() => {
         return this.some((elem) => elem.matches(selector));
       }
 
-      let sel = (selector instanceof TjQueryCollection ? selector : $(selector)).toSet();
+      let sel = (selector instanceof TjQueryCollection ? selector : this.$(selector)).toSet();
       return this.some((elem) => sel.has(elem));
     }
     
@@ -141,7 +159,7 @@ const TjQueryCollection = (() => {
       if (typeof selector === 'string') {
         return this.filter((i, elem) => !elem.matches(selector));
       }
-      let sel = (selector instanceof TjQueryCollection ? selector : $(selector)).toSet();
+      let sel = (selector instanceof TjQueryCollection ? selector : this.$(selector)).toSet();
       return this.filter((i, elem) => !sel.has(elem));
     }
     
@@ -155,7 +173,7 @@ const TjQueryCollection = (() => {
       if (typeof selector === 'string') {
         return this.filter((i, elem) => elem.querySelector(':scope ' + selector));
       }
-      let sel = selector instanceof TjQueryCollection ? selector : $(selector);
+      let sel = selector instanceof TjQueryCollection ? selector : this.$(selector);
       return this.filter((i, elem) => sel.some((test) => elem !== test && elem.contains(test)));
     }
 
@@ -167,7 +185,7 @@ const TjQueryCollection = (() => {
     filter(selector) {
       if (!selector) return super.filter((elem) => elem instanceof Element);
       if (typeof selector === 'function') {
-        let res = new TjQueryCollection();
+        let res = new this.constructor();
         this.each((i, elem) => {
           if (selector(i, elem)) {
             res.push(elem);
@@ -179,7 +197,7 @@ const TjQueryCollection = (() => {
       if (typeof selector === 'string') {
         return this.filter((i, elem) => elem.matches(selector));
       }
-      let sel = (selector instanceof TjQueryCollection ? selector : $(selector)).toSet();
+      let sel = (selector instanceof TjQueryCollection ? selector : this.$(selector)).toSet();
       return this.filter((i, elem) => sel.has(elem));
     }
     
@@ -192,7 +210,7 @@ const TjQueryCollection = (() => {
       if (typeof selector === 'function') {
         return super.find(selector);
       }
-      return $(selector, this);
+      return this.$(selector, this);
     }
     
     /**
@@ -459,7 +477,7 @@ const TjQueryCollection = (() => {
       if (document.readyState === 'complete') {
         setTimeout(callback);
       } else {
-        $document.one('DOMContentLoaded', callback);
+        this.$document.one('DOMContentLoaded', callback);
       }
       return this;
     }
@@ -582,8 +600,8 @@ const TjQueryCollection = (() => {
 
       let get = (test) => test && test.length && test;
       return get(this.attr('aria-label')) || 
-              get(get(this.attr('aria-labelledby')) && $('#' + this.attr('aria-labelledby')).label()) || 
-              get(get(this.attr('id')) && $('label[for="'+ this.attr('id') + '"]').label()) ||
+              get(get(this.attr('aria-labelledby')) && this.$('#' + this.attr('aria-labelledby')).label()) || 
+              get(get(this.attr('id')) && this.$('label[for="'+ this.attr('id') + '"]').label()) ||
               get(this.attr('title')) || 
               get(this.attr('placeholder')) ||
               get(this.attr('alt')) || 
@@ -714,7 +732,7 @@ const TjQueryCollection = (() => {
         return ind >= this.length ? -1 : ind;
       }
 
-      let sel = (selector instanceof TjQueryCollection ? selector : $(selector)).toSet();
+      let sel = (selector instanceof TjQueryCollection ? selector : this.$(selector)).toSet();
       this.each((elem) => !(sel.has(elem) || (ind++ && false)));
 
       return ind >= this.length ? -1 : ind;
@@ -743,7 +761,7 @@ const TjQueryCollection = (() => {
      */
     eq(index) {
       let elem = this.get(index)
-      return elem  ? new TjQueryCollection(elem) : new TjQueryCollection();
+      return elem  ? new this.constructor(elem) : new this.constructor();
     }
 
     /**
@@ -764,7 +782,7 @@ const TjQueryCollection = (() => {
      * @returns {TjQueryCollection}
      */
     nextUntil(selector, filter) {
-      return from(propElem(this, 'nextElementSibling', filter, true, false, selector));
+      return from(propElem(this, 'nextElementSibling', filter, true, false, selector), this.constructor);
     }
 
     /**
@@ -794,7 +812,7 @@ const TjQueryCollection = (() => {
      * @returns {TjQueryCollection}
      */
     prevUntil(selector, filter) {
-      return from(propElem(this, 'previousElementSibling', filter, true, false, selector, true));
+      return from(propElem(this, 'previousElementSibling', filter, true, false, selector, true), this.constructor);
     }
 
     /**
@@ -812,7 +830,7 @@ const TjQueryCollection = (() => {
      * @returns {TjQueryCollection}
      */
     siblings(selector) {
-      return $([
+      return this.$([
         propElem(this, 'nextElementSibling', selector, true),
         propElem(this, 'previousElementSibling', selector, true, false, false, true)
       ]);
@@ -824,7 +842,7 @@ const TjQueryCollection = (() => {
      * @returns {TjQueryCollection}
      */
     children(selector) {
-      return from(propElem(this.map((i, elem) => elem.firstChild), 'nextElementSibling', selector, true, true));
+      return from(propElem(this.map((i, elem) => elem.firstChild), 'nextElementSibling', selector, true, true), this.constructor);
     }
     
     /**
@@ -839,7 +857,7 @@ const TjQueryCollection = (() => {
           res.add(elem);
         }
       });
-      return from(res);
+      return from(res, this.constructor);
     }
     
     /**
@@ -848,7 +866,7 @@ const TjQueryCollection = (() => {
      * @returns {TjQueryCollection}
      */
     parents(selector) {
-      return from(propElem(this, 'parentNode', selector, true));
+      return from(propElem(this, 'parentNode', selector, true), this.constructor);
     }
     
     /**
@@ -857,7 +875,11 @@ const TjQueryCollection = (() => {
      * @returns {TjQueryCollection}
      */
     closest(selector) {  
-      return $(this.map((i, elem) => elem.closest(selector)));
+      return this.$(this.map((i, elem) => elem.closest(selector)));
+    }
+
+    static get Event() {
+      return Event;
     }
 
     /**
@@ -867,29 +889,31 @@ const TjQueryCollection = (() => {
      * @returns {TjQueryCollection}
      */
     static select(selector, context) {
-      if (!selector) return new TjQueryCollection();
-      if (!context && selector === document) return new TjQueryCollection(document);
-      if (!context && selector instanceof Element) return new TjQueryCollection(selector);
-      if (!context && selector instanceof TjQueryCollection) return selector.filter().unique().sort();
+      if (!selector) return new this();
+      selector = select(selector, context);
+      if (!context && selector === document) return new this(document);
+      if (!context && selector instanceof Element) return new this(selector);
+      if (!context && typeof selector === 'string') return from(document.querySelectorAll(selector), this);
+      if (!context && selector instanceof this) return selector.filter().unique().sort();
       if (typeof selector === 'function') {
-        $document.ready(selector);
-        return new TjQueryCollection();
+        this.$document.ready(selector);
+        return new this();
       }
       
       let selectors = Array.prototype.isPrototypeOf(selector) ? selector : [selector];
-      let $context = context ? (context instanceof TjQueryCollection ? context : $(context)) : $document;
+      let $context = context ? (context instanceof this ? context : this.select(context)) : this.$document;
       let elems = new Set();
       let doFilter = !!context;
       let doSort = selectors.length > 1;
     
       for (let sel of selectors) {
-        if (sel instanceof TjQueryCollection) {
+        if (sel instanceof this) {
           sel.each((i, elem) => {
             if (elem instanceof Element) elems.add(elem);
           });
         } else if (sel instanceof Element) {
           if (!context && selectors.length === 1) {
-            return new TjQueryCollection(sel);
+            return new this(sel);
           }
           elems.add(sel)
         }  else if (sel instanceof NodeList) {
@@ -901,16 +925,16 @@ const TjQueryCollection = (() => {
           }
         } else if (sel instanceof HTMLCollection) {
           if (!context && selectors.length === 1) {
-            return from(sel);
+            return from(sel, this);
           }
-          from(sel).each((elem) => {
+          from(sel, this).each((elem) => {
             elems.add(elem);
           });
         } else if (typeof sel === 'string') {
           sel = select(sel, $context);
           if (typeof sel === 'string') {
             if (!context && selectors.length === 1) {
-              return from(document.querySelectorAll(sel));
+              return from(document.querySelectorAll(sel), this);
             }
             $context.each((i, cElem) => {
               cElem.querySelectorAll(':scope ' + sel).forEach((elem) => elems.add(elem));
@@ -932,7 +956,7 @@ const TjQueryCollection = (() => {
             }
           })
         } else {
-          from(sel).each((i, elem) => {
+          from(sel, this).each((i, elem) => {
             if(elem instanceof Element) {
               elems.add(elem);
             }
@@ -940,7 +964,7 @@ const TjQueryCollection = (() => {
         }
       }
 
-      elems = from(elems);
+      elems = from(elems, this);
     
       // Filter within context
       if (doFilter) {
@@ -958,16 +982,6 @@ const TjQueryCollection = (() => {
     }
 
   }
-
-  /**
-   * Document singleton.
-   */
-  let $document = new TjQueryCollection(document);
-
-  /**
-   * The query selector function.
-   */
-  let $ = TjQueryCollection.select;
 
   ['blur',
   'change',
@@ -993,7 +1007,7 @@ const TjQueryCollection = (() => {
     /**
      * @param {string} [data] 
      * @param {function} [callback] 
-     * @param {Object} [options] addEventListener options. If 'true' is provided, then jquery-like .once() is assumed.
+     * @param {Object} [options] addEventListener options. If 'true' is provided, then jquery-like .one() is assumed.
      * @returns {TjQueryCollection}
      */
     function event(data, callback, options) {
@@ -1073,7 +1087,6 @@ const TjQueryCollection = (() => {
    * @returns {Array}
    */
   function from(object, Class) {
-    Class = typeof Class === 'undefined' ? TjQueryCollection : Class;
     if (typeof object !== 'object' || !object) return new Class(); 
     if (Class.isPrototypeOf(object)) return object;
     if (object.length) {
@@ -1148,4 +1161,4 @@ const TjQueryCollection = (() => {
 
 })();
 
-const tjQuery = TjQueryCollection.select;
+const tjQuery = TjQueryCollection.select.bind(TjQueryCollection);
