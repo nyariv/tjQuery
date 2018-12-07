@@ -42,7 +42,7 @@ const TjQueryCollection = (() => {
      * Query selector shortcut.
      */
     get $() {
-      return this.constructor.select.bind(this.constructor);
+      return this.constructor.tjQuery.bind(this.constructor);
     }
     
     get $document()  {
@@ -140,13 +140,13 @@ const TjQueryCollection = (() => {
      * @returns {boolean}
      */
     is(selector) {
-      selector = select(selector);
+      selector = this.constructor.select(selector, this, true);
       if (typeof selector === 'string') {
         return this.some((elem) => elem.matches(selector));
       }
 
-      let sel = (selector instanceof TjQueryCollection ? selector : this.$(selector)).toSet();
-      return this.some((elem) => sel.has(elem));
+      let sel = (selector instanceof TjQueryCollection ? selector : this.$(selector));
+      return this.some((elem) => sel.includes(elem));
     }
     
     /**
@@ -155,7 +155,7 @@ const TjQueryCollection = (() => {
      * @returns {TjQueryCollection}
      */
     not(selector) {
-      selector = select(selector, this, true);
+      selector = this.constructor.select(selector, this, true);
       if (typeof selector === 'string') {
         return this.filter((i, elem) => !elem.matches(selector));
       }
@@ -169,9 +169,9 @@ const TjQueryCollection = (() => {
      * @returns {TjQueryCollection}
      */
     has(selector) {
-      selector = select(selector, this);
+      selector = this.constructor.select(selector, this);
       if (typeof selector === 'string') {
-        return this.filter((i, elem) => elem.querySelector(':scope ' + selector));
+        selector = this.$(selector, this);
       }
       let sel = selector instanceof TjQueryCollection ? selector : this.$(selector);
       return this.filter((i, elem) => sel.some((test) => elem !== test && elem.contains(test)));
@@ -193,7 +193,7 @@ const TjQueryCollection = (() => {
         });
         return res;
       }
-      selector = select(selector, this, true);
+      selector = this.constructor.select(selector, this, true);
       if (typeof selector === 'string') {
         return this.filter((i, elem) => elem.matches(selector));
       }
@@ -210,7 +210,7 @@ const TjQueryCollection = (() => {
       if (typeof selector === 'function') {
         return super.find(selector);
       }
-      return this.$(selector, this);
+      return this.$(selector, new this.constructor(...this));
     }
     
     /**
@@ -241,7 +241,7 @@ const TjQueryCollection = (() => {
           let wrapper = (e) => {
             let args = getStore(e.target, 'triggerArgs', new Map()).get(ev) || [];
             let stop = false;
-            let event = new TjqEvent(e);
+            let event = e.wrapperEvent || new TjqEvent(e);
             if (typeof params.options === 'boolean') {
               let elem;
               eventContainer.allHandlers.forEach((container) => {
@@ -417,16 +417,16 @@ const TjQueryCollection = (() => {
      */
     trigger(eventType, extraParams) {
       let args = typeof extraParams === 'undefined' ? [] : extraParams instanceof Array ? args : [extraParams];
-      let event = typeof eventType === 'object' ? eventType : new Event(eventType, {bubbles: true, cancelable: true});
+      let event = eventType instanceof TjqEvent ? eventType : new Event(eventType, {bubbles: true, cancelable: true});
       this.each((index, elem) => {
         let triggerArgsStore = getStore(elem, 'triggerArgs', new Map());
-        triggerArgsStore.set(eventType, args);
-        if (typeof elem[eventType] === 'function') {
-          elem[eventType]();
+        triggerArgsStore.set(event.type, args);
+        if (typeof elem[event.type] === 'function') {
+          elem[event.type]();
         } else {
-          elem.dispatchEvent(event);
+          elem.dispatchEvent(event.originalEvent || event);
         }
-        triggerArgsStore.delete(eventType);
+        triggerArgsStore.delete(event.type);
       });
       return this;
     }
@@ -733,7 +733,7 @@ const TjQueryCollection = (() => {
      * @returns {number}
      */
     index(selector) {
-      selector = select(selector, this, true);
+      selector = this.constructor.select(selector, this, true);
       let ind = 0;
       if (typeof selector === 'undefined') {
         return this.first().prevAll().length;
@@ -876,20 +876,36 @@ const TjQueryCollection = (() => {
      * @returns {TjQueryCollection}
      */
     parents(selector) {
-      return from(propElem(this, 'parentNode', selector, true), this.constructor);
+      return from(propElem(this, 'parentNode', selector, true), this.constructor).sort();
     }
     
     /**
-     * Element.parentNode recursive, limit to one that matches selector.
-     * @param {string} selector
+     * Element.parentNode recursive, limit to first ones that match selector.
+     * @param {*} selector
+     * @param {*} [context]
      * @returns {TjQueryCollection}
      */
-    closest(selector) {  
-      return this.$(this.map((i, elem) => elem.closest(selector)));
+    closest(selector, context) {
+      selector = this.constructor.select(selector, context);
+      if (context) {
+        selector = this.$(selector, context);
+      }
+      return from(propElem(this, 'parentNode', selector), this.constructor);
     }
 
-    static get Event() {
-      return Event;
+    static Event(type, extra) {
+      let e = new Event(type, Object.assign({bubbles: true, cancelable: true}, extra || {}));
+      return new TjqEvent(e);
+    }
+
+    /**
+     * Placeholder function for adding custom selectors.
+     * @param {string} selector 
+     * @param {TjQueryCollection} [context] 
+     * @param {boolean} [filterParents] 
+     */
+    static select(selector, context, filterByParents) {
+      return selector
     }
 
     /**
@@ -898,9 +914,9 @@ const TjQueryCollection = (() => {
      * @param {*} context 
      * @returns {TjQueryCollection}
      */
-    static select(selector, context) {
+    static tjQuery(selector, context) {
       if (!selector) return new this();
-      selector = select(selector, context);
+      selector = this.select(selector, context);
       if (!context && selector === document) return new this(document);
       if (!context && selector instanceof Element) return new this(selector);
       if (!context && typeof selector === 'string') return from(document.querySelectorAll(selector), this);
@@ -911,10 +927,12 @@ const TjQueryCollection = (() => {
       }
       
       let selectors = Array.prototype.isPrototypeOf(selector) ? selector : [selector];
-      let $context = context ? (context instanceof this ? context : this.select(context)) : this.$document;
+      let $context = context ? (context instanceof this ? context : this.tjQuery(context)) : this.$document;
       let elems = new Set();
       let doFilter = !!context;
       let doSort = selectors.length > 1;
+
+      if (selector === $context) return selector;
     
       for (let sel of selectors) {
         if (sel instanceof this) {
@@ -941,7 +959,7 @@ const TjQueryCollection = (() => {
             elems.add(elem);
           });
         } else if (typeof sel === 'string') {
-          sel = select(sel, $context);
+          sel = this.select(sel, $context);
           if (typeof sel === 'string') {
             if (!context && selectors.length === 1) {
               return from(document.querySelectorAll(sel), this);
@@ -1037,6 +1055,7 @@ const TjQueryCollection = (() => {
       let propagationStopped = false;
       
       this['originalEvent'] = e;
+      Object.defineProperty(e, 'wrapperEvent', {get: () => this});
       this['delegateTarget'] = e.currentTarget;
       this['isImmediatePropagationStopped'] = () => immediateStopped;
       this['isPropagationStopped'] = () => propagationStopped;
@@ -1089,7 +1108,13 @@ const TjQueryCollection = (() => {
   function propElem(collection, prop, selector, multiple, includeFirst, stopAt, reverse) {
     let res = new Set();
     let cache = new Set();
-    let is = (elem, sel) => elem instanceof Element && (typeof sel === 'string' ? elem.matches(sel) : (!sel || elem === sel));
+    let is = (elem, sel) => {
+      if (!(elem instanceof Element)) return false;
+      if (!sel) return false;
+      if (typeof sel === 'string') return elem.matches(sel);
+      if (sel instanceof Array) return sel.includes(elem);
+      return elem === sel;
+    };
     for (let i = reverse ? collection.length - 1 : 0; reverse ? i >= 0 : i < collection.length; reverse ? i-- : i++) {
       let elem = collection[i];
       if (!elem) continue;
@@ -1214,16 +1239,6 @@ const TjQueryCollection = (() => {
     return elem && e.currentTarget.contains(elem) ? elem : null;
   }
 
-  /**
-   * Placeholder function for adding custom selectors.
-   * @param {string} selector 
-   * @param {TjQueryCollection} [context] 
-   * @param {boolean} [filterParents] 
-   */
-  function select(selector, context, filterByParents) {
-    return selector;
-  }
-
 })();
 
-const tjQuery = TjQueryCollection.select.bind(TjQueryCollection);
+const tjQuery = TjQueryCollection.tjQuery.bind(TjQueryCollection);
