@@ -1110,7 +1110,7 @@ const TjQueryCollection = (() => {
     let cache = new Set();
     let is = (elem, sel) => {
       if (!(elem instanceof Element)) return false;
-      if (!sel) return false;
+      if (!sel) return true;
       if (typeof sel === 'string') return elem.matches(sel);
       if (sel instanceof Array) return sel.includes(elem);
       return elem === sel;
