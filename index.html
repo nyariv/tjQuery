@@ -303,6 +303,10 @@
           // pass = $tjqDivs.b.length + " " + $jqDivs.b.length;
         }
 
+        if (!pass) {
+          console.error($tjqDivs.b, $jqDivs.b);
+        }
+
         let valid = tjqTime > minAccuracy * 100;
         let jqValid = valid && jqTime > minAccuracy * 100 && jqTime / tjqTime < 100;
         let zValid = valid && zTime > minAccuracy * 100;

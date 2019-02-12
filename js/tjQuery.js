@@ -171,7 +171,16 @@ const TjQueryCollection = (() => {
     has(selector) {
       selector = this.constructor.select(selector, this);
       if (typeof selector === 'string') {
-        selector = this.$(selector, this);
+        let cache = new Set();
+        return this.filter((i, elem) => {
+          if (cache.has(elem)) {
+            return true;
+          }
+          let found = from(elem.querySelectorAll(':scope ' + selector), this.constructor);
+          found = found.add(found.parents());
+          found.each((i, e) => cache.add(e));
+          return found.length;
+        });
       }
       let sel = selector instanceof TjQueryCollection ? selector : this.$(selector);
       return this.filter((i, elem) => sel.some((test) => elem !== test && elem.contains(test)));
