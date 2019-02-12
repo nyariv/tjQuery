@@ -182,7 +182,7 @@ const TjQueryCollection = (() => {
           return found.length;
         });
       }
-      let sel = selector instanceof TjQueryCollection ? selector : this.$(selector);
+      selector = selector instanceof TjQueryCollection ? selector : this.$(selector);
       return this.filter((i, elem) => sel.some((test) => elem !== test && elem.contains(test)));
     }
 
@@ -206,7 +206,7 @@ const TjQueryCollection = (() => {
       if (typeof selector === 'string') {
         return this.filter((i, elem) => elem.matches(selector));
       }
-      let sel = (selector instanceof TjQueryCollection ? selector : this.$(selector)).toSet();
+      selector = (selector instanceof TjQueryCollection ? selector : this.$(selector)).toSet();
       return this.filter((i, elem) => sel.has(elem));
     }
     
@@ -443,7 +443,7 @@ const TjQueryCollection = (() => {
      * @param {Object} [extraParams] 
      */
     trigger(eventType, extraParams) {
-      let args = typeof extraParams === 'undefined' ? [] : extraParams instanceof Array ? args : [extraParams];
+      let args = typeof extraParams === 'undefined' ? [] : extraParams instanceof Array ? extraParams : [extraParams];
       let event = eventType instanceof TjqEvent ? eventType : new Event(eventType, {bubbles: true, cancelable: true});
       this.each((index, elem) => {
         let triggerArgsStore = getStore(elem, 'triggerArgs', new Map());
@@ -461,7 +461,9 @@ const TjQueryCollection = (() => {
     /**
      * Element.addEventListener()
      * @param {string} events
-     * @param {function} callback 
+     * @param {string} [selector] delegate selector 
+     * @param {string} [data] 
+     * @param {function} [callback] 
      * @param {Object} [options] addEventListener options.
      * @returns {this}
      */
@@ -477,7 +479,8 @@ const TjQueryCollection = (() => {
     
     /**
      * .on('click') alias. Adds accesibility support.
-     * @param {function} callback 
+     * @param {string} [data] 
+     * @param {function} [callback] 
      * @param {Object} [options] addEventListener options.
      * @returns {this}
      */
@@ -770,7 +773,7 @@ const TjQueryCollection = (() => {
         return ind >= this.length ? -1 : ind;
       }
 
-      let sel = (selector instanceof TjQueryCollection ? selector : this.$(selector)).toSet();
+      selector = (selector instanceof TjQueryCollection ? selector : this.$(selector)).toSet();
       this.each((elem) => !(sel.has(elem) || (ind++ && false)));
 
       return ind >= this.length ? -1 : ind;
@@ -1215,6 +1218,13 @@ const TjQueryCollection = (() => {
     return Class.from(object);
   }
 
+  /**
+   * Get a storage container associated with an element.
+   * @param {Element} elem the element.
+   * @param {string} store store name.
+   * @param {*} [defaultValue] default value if store does not exist.
+   * @returns {*} the store object.
+   */
   function getStore(elem, store, defaultValue) {
     if(!elementStorage.has(elem)) {
       elementStorage.set(elem, new Map());
@@ -1228,6 +1238,16 @@ const TjQueryCollection = (() => {
     return types.get(store);
   }
   
+  /**
+   * Parses .on() arguments into a more manageble properties of an object.
+   * @see TjQueryCollection.on()
+   * @param {string|Object} events
+   * @param {string} [selector]
+   * @param {*} [data] 
+   * @param {function} [callback] 
+   * @param {boolean|Object} [options] 
+   * @return {Object} object of the params as object properties.
+   */
   function parseOnParams(events, selector, data, callback, options) {
     // (events, selector, data, options)
     if (typeof events !== 'string') {
@@ -1256,6 +1276,12 @@ const TjQueryCollection = (() => {
     return {events, selector, data, callback, options};
   }
 
+  /**
+   * Helper function for detecting the appropiate currentTarget of an event.
+   * @param {Event} e 
+   * @param {string} selector 
+   * @returns {Element|null} currentTarget, null if not valid.
+   */
   function getEventElem(e, selector) {
     let elem = e.currentTarget;
     if(selector) {
