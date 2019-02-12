@@ -237,8 +237,7 @@ const TjQueryCollection = (() => {
       params.options = params.options || false;
 
       objectOrProp(params.events, params.callback, (namespace, originalCallback) => {
-        originalCallback = originalCallback === false ? () => false : originalCallback;
-        if (typeof originalCallback !== 'function') return;
+        if (typeof originalCallback !== 'function' && originalCallback !== false) return;
 
         let namespaces = namespace.split(".");
         let ev = namespaces.shift();
@@ -252,9 +251,26 @@ const TjQueryCollection = (() => {
             let stop = false;
             let event = e.wrapperEvent || new TjqEvent(e);
             if (typeof params.options === 'boolean') {
-              let elem;
+              let elems = [];
               eventContainer.allHandlers.forEach((container) => {
-                if(typeof container.options === 'boolean' && !event.isImmediatePropagationStopped() && (elem = getEventElem(e, container.selector))) {
+                if (typeof container.options === 'boolean') {
+                  let elem = getEventElem(e, container.selector);
+                  if (elem) {
+                    elems.push({elem: elem, container: container});
+                  }
+                  
+                }
+              });
+
+              elems.sort((a, b) => {
+                return a.elem === b.elem ? 0 : a.elem.contains(b.elem) ? 1 : -1;
+              });
+
+              let lastElem;
+              elems.forEach((next) => {
+                let container = next.container;
+                let elem = next.elem;
+                if(!event.isImmediatePropagationStopped() && !((stop || event.isPropagationStopped()) && lastElem !== elem)) {
                   let newEvent = Object.create(event);
                   newEvent.data = container.data;
                   newEvent.currentTarget = elem;
@@ -268,7 +284,8 @@ const TjQueryCollection = (() => {
                   if (container.options) {
                     container.deleteSelf();
                   }
-                  stop = (event.result = container.originalHandler.call(elem, newEvent, ...args)) === false || stop;
+                  stop = !container.originalHandler || (event.result = container.originalHandler.call(elem, newEvent, ...args)) === false || stop;
+                  lastElem = elem;
                 }
               });
             } else {
@@ -291,7 +308,7 @@ const TjQueryCollection = (() => {
               if (params.options.once) {
                 container.deleteSelf();
               }
-              stop = originalCallback.call(elem, event, ...args) === false;
+              stop = !originalCallback || originalCallback.call(elem, event, ...args) === false;
             }
 
             if (stop) {
@@ -346,6 +363,7 @@ const TjQueryCollection = (() => {
             elem.addEventListener(ev, wrapper, params.options);
           } else if (!eventContainer.isMasterSet) {
             eventContainer.isMasterSet = true;
+            eventContainer.master = wrapper;
             elem.addEventListener(ev, wrapper);
           }
         });
@@ -469,7 +487,7 @@ const TjQueryCollection = (() => {
       }
       
       this
-        .on('click', data, callback, options)
+        .on('click', null, data, callback, options)
         .not('a[href], button, input, select, textarea')
         .once('tjqAllyClick')
         .addClass('tjq-ally-click')
@@ -574,6 +592,7 @@ const TjQueryCollection = (() => {
       if (typeof set !== 'undefined') {
         this.prop('value', set);
         this.trigger('change');
+        return this;
       }
       return this.prop('value', set);
     }
