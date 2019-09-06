@@ -183,7 +183,7 @@ const TjQueryCollection = (() => {
         });
       }
       selector = selector instanceof TjQueryCollection ? selector : this.$(selector);
-      return this.filter((i, elem) => sel.some((test) => elem !== test && elem.contains(test)));
+      return this.filter((i, elem) => selector.some((test) => elem !== test && elem.contains(test)));
     }
 
     /**
@@ -207,7 +207,7 @@ const TjQueryCollection = (() => {
         return this.filter((i, elem) => elem.matches(selector));
       }
       selector = (selector instanceof TjQueryCollection ? selector : this.$(selector)).toSet();
-      return this.filter((i, elem) => sel.has(elem));
+      return this.filter((i, elem) => selector.has(elem));
     }
     
     /**
@@ -930,13 +930,16 @@ const TjQueryCollection = (() => {
     }
 
     /**
-     * Placeholder function for adding custom selectors.
+     * The query selector function that handles special jquery selectors. Returns original selector string if no special selectors found, otherwise a collection is returned.
      * @param {string} selector 
      * @param {TjQueryCollection} [context] 
      * @param {boolean} [filterParents] 
      */
     static select(selector, context, filterByParents) {
-      return selector
+      if (typeof selector !== 'string' || !selector.includes(":")) return selector;
+      const parsed = parseSelectors(selector);
+      if (!parsed.hasSpecial) return selector;
+      return selectorFilter(parsed.sections, context, filterByParents);
     }
 
     /**
@@ -1126,6 +1129,77 @@ const TjQueryCollection = (() => {
     }
   }
 
+  const $html = TjQueryCollection.tjQuery('html');
+
+  const specials = {
+    visible: function() {return this.filter((i, elem) => elem.offsetParent !== null || elem === $html[0] || elem === document.body)},
+    hidden: function() {return this.filter((i, elem) => elem.offsetParent === null && elem !== $html[0] && elem !== document.body)},
+    parent: function() {return this.filter((i, elem) => elem.firstChild)},
+    has: function(val) {
+      let parsed = parseSelectors(val);
+      if (!parsed.hasSpecial) {
+        return this.filter((i, elem) => elem.querySelector(':scope ' + val));
+      }
+      return this.filter((i, elem) => {
+        return selectorFilter(parsed.sections, new this.constructor(elem)).length;
+      });
+    },
+    contains: function(val) {return this.filter((i, elem) => (elem.textContent || "").includes(val))},
+    lang: function(val) {
+      let cache = new Map();
+      return this.filter((i, elem) => {
+        let found = {};
+        let el = elem;
+        do {
+          if (cache.has(el)) return found.lang = cache.get(el).lang;  
+          let lang;
+          if (lang = el.matches('html') ? el.lang : (el.getAttribute('xml:lang') || el.getAttribute('lang'))) {
+            found.lang = lang === val || !lang.indexOf(val + '-');
+          }
+        } while (typeof found.lang === 'undefined' && (el = el.parentElement));
+        
+        return found.lang;
+      });
+    },
+    not: function(val) {
+      let parsed = parseSelectors(val);
+      if (!parsed.hasSpecial) {
+        return this.filter((i, elem) => !elem.matches(val));
+      }
+      return this.filter((i, elem) => {
+        return !selectorFilter(parsed.sections, new this.constructor(elem), true).length;
+      });
+    },
+    checked: function() {return this.filter((i, elem) => elem.checked)},
+    disabled: function() {return this.filter((i, elem) => elem.disabled)},
+    enabled: function() {return this.filter((i, elem) => !elem.disabled)},
+    selected: function() {return this.filter((i, elem) => elem.selected)},
+    even: function() {return this.filter((i) => !(i % 2))},
+    odd: function() {return this.filter((i) => i % 2)},
+    first: function() {return this.eq(0)},
+    last: function() {return this.eq(-1)},
+    root: function() {return this.filter((i, elem) => !elem.parentNode)},
+    target: function() {return window.location.hash.length ? this.filter((i, elem) => elem.id === window.location.hash.substring(1)) : new TjQueryCollection()},
+  }
+
+  let selectorGroups = {
+    button: "button, input[type=button]",
+    checkbox: "input[type=checkbox]",
+    file: "input[type=file]",
+    header: "h1, h2, h3, h4, h5, h6, h7, h8",
+    image: "[type=image]",
+    input: "button, input, textarea, select",
+    password: "input[type=password]",
+    radio: "input[type=radio]",
+    reset: "input[type=reset]",
+    submit: "input[type=submit], button[type=submit]",
+    text: "input[type=text], input:not([type])]",
+  }
+
+  for(let group in selectorGroups) {
+    specials[group] = function() {return this.filter(selectorGroups[group])};
+  }
+
   return TjQueryCollection;
 
   /**
@@ -1291,6 +1365,187 @@ const TjQueryCollection = (() => {
       }
     }
     return elem && e.currentTarget.contains(elem) ? elem : null;
+  }
+
+  /**
+   * Helper function to split a selector string into sections (comma separated selectors) and levels (space separated selectors) per section.
+   * @param {string} s selector
+   * @returns {Array} Array of sections, which have arrays of levels.
+   */
+  function splitChar (s) {
+    let partStart = 0;
+    var parts = [];
+    let innerCount = 0;
+    var section = [];
+    var level = [];
+    section.push(level);
+    parts.push(section);
+    let newSection = false;
+    for (let i = 0; i < s.length; i++) {
+      if (!innerCount && ~", :".indexOf(s[i])) {
+        if(s[i] === ',') {
+          section = [];
+          parts.push(section);
+          level = [];
+          section.push(level);
+          newSection = true;
+        } else if (s[i] === " ") {
+          if (!newSection) {
+            let p = s.substring(partStart, i).trim();
+            if (p.length) {
+              level.push(p);
+            }
+            level = [];
+            section.push(level);
+          }
+        } else {
+          let p = s.substring(partStart, i).trim();
+          if (p.length) {
+            level.push(p);
+          }
+        }
+        partStart = i + 1;
+      } else if (s[i] === '(') {
+        innerCount++;
+      } else if (s[i] === ')') {
+        innerCount--;
+      }
+      if (s[i] !== ' ') {
+        newSection = false;
+      }
+    }
+    let p = s.substring(partStart).trim();
+    if (p.length) {
+      level.push(p);
+    }
+    return parts;
+  }
+
+  /**
+   * Helper function to extract special selectors from a selector string.
+   * @param {string} s Selector string.
+   * @returns {Object} A map with hasSpecial falg, and sections.
+   */
+  function parseSelectors (s) {
+    let hasSpecial = false;
+    let sections = splitChar(s);
+    for (let sec in sections) {
+      let levels = sections[sec];
+      let parts = [];
+      let reg = "";
+      let regCount = 0;
+      for (let level = 0; level < levels.length; level++) {
+        let subSelectors = levels[level];
+        let subs = [];
+        reg = "";
+        for (let sub of subSelectors) {
+          let parePos = sub.indexOf("(");
+          let arg;
+          if (~parePos) {
+            arg = sub.substring(parePos + 1, sub.length - 1);
+            sub = sub.substring(0, parePos);
+          }
+          if (specials[sub]) {
+            subs.push([sub, arg]);
+            hasSpecial = true;
+          } else {
+            subs.push(sub);
+          }
+        }
+        let specs = [];
+        for (let i in subs) {
+          if (subs[i] instanceof Array) {
+            if (subs[i][0] === 'parent' && level < levels.length - 1) {
+
+            } else {
+              specs.push(subs[i]);
+            }
+          } else {
+            reg += subs[i];
+          }
+        }
+        if (reg.length) {
+          if (typeof parts[parts.length - 1] === 'string') {
+            reg = parts[parts.length - 1] = parts[parts.length - 1] + " " + reg;
+          } else{
+            regCount++;
+            parts.push(reg);
+          }
+        } else {
+          if (typeof parts[parts.length - 1] === 'string') {
+            reg = parts[parts.length - 1] = parts[parts.length - 1] + " *";
+          } else {
+            regCount++;
+            parts.push("*"); 
+          }
+        }
+        parts = parts.concat(specs);
+      }
+      parts.nativeSelector = parts.filter((item) => typeof item === 'string').join(' ');
+      parts.nativeSelector = parts.nativeSelector.length ? parts.nativeSelector : '*'
+      parts.nativePartsCount = regCount;
+      sections[sec] = parts;
+    }
+    return {hasSpecial, sections};
+  }
+
+  /**
+   * 
+   * @param {Array} parsed Selecotr sections and levels array with defined special selectors.
+   * @param {TjQueryColleciton} context Context to limit elements to find.
+   * @param {boolean} filterByParents The direction to search elements.
+   */
+  function selectorFilter (parsed, context, filterByParents) {
+    let all = [];
+    let current = new TjQueryCollection();
+    for(let i = 0; i < parsed.length; i++) {
+      let section = Object.assign([], parsed[i]);
+      if (filterByParents) {
+        let part = section.pop();
+        current = context;
+        if (section.nativeSelector !== '*') {
+          current = context.filter(section.nativeSelector);
+        }
+        if (typeof part !== 'string') {
+          current = specials[part[0]].call(current, part[1]);
+        }
+
+        if (current.length) {
+          let parents = current;
+          while(part = section.pop()) {
+            let upstream = section.filter((item) => typeof item === 'string').join (' ');
+            if (upstream.length && upstream !== '*') {
+              parents = parents.parents(upstream);
+            }
+            if (typeof part !== 'string') {
+              parents = specials[part[0]].call(parents, part[1]);
+              current = current.filter((i, elem) => parents.some((parent) => elem !== parent && parent.contains(elem)))
+            }
+          }
+        }
+      } else {
+        current = context;
+        if (section.nativeSelector !== '*') {
+          current = context.filter((i, elem) => elem.querySelector(':scope ' + section.nativeSelector));
+        }
+        let part;
+        while(part = section.shift()) {
+          let downstream = section.filter((item) => typeof item === 'string').join (' ');
+          if (typeof part === 'string') {
+            downstream = downstream.length ? downstream : null;
+            current = current.find(part);
+            if (downstream) {
+              current = current.filter((i, elem) => elem.querySelector(':scope ' + downstream));
+            }
+          } else {
+            current = specials[part[0]].call(current, part[1]);
+          }
+        }
+      }
+      all.push(current);
+    }
+
+    return all.length > 1 ? $(all) : (all.length ? all[0] : new TjQueryCollection());
   }
 
 })();

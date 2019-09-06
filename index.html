@@ -53,6 +53,7 @@
       document.getElementById('results').innerHTML = "";
       document.getElementById('dummy').innerHTML = "";
       document.getElementById('dummy').appendChild(dummyContent(divsLevel, divsLevel));
+      zeptoNotSupported = false;
       run();
       // setTimeout(() => {
       //   for (let i = 0; i < 50000; i++) {
@@ -157,15 +158,15 @@
         "$divs.prevUntil('div')",
         "$divs.prevAll('div')",
         
-        // "$divs.find('div span:first-child')",
-        // "$divs.find('div span:contains(Here)')",
-        // "$divs.find('div span:visible')",
-        // "$divs.find('div span:hidden')",
-        // "$divs.find('div span:parent')",
-        // "$divs.find('span div:has(div span:hidden)')",
-        // "$divs.find('span div:not(div span:hidden)')",
-        // "$divs.find('div span:lang(en)')",
-        // "$divs.find(':visible')",
+        "$divs.find('div span:first-child')",
+        "$divs.find('div span:contains(Here)')",
+        "$divs.find('div span:visible')",
+        "$divs.find('div span:hidden')",
+        "$divs.find('div span:parent')",
+        "$divs.find('span div:has(div span:hidden)')",
+        "$divs.find('span div:not(div span:hidden)')",
+        "$divs.find('div span:lang(en)')",
+        "$divs.find(':visible')",
         
         // "$divs.not('div span:contains(Here)')",
         // "$divs.not('div span:visible')",
@@ -224,6 +225,7 @@
       let zValidCount = 0;
       let improvementTotal = 0;
       let zImprovementTotal = 0;
+      let zeptoNotSupported = false;
       function run() {
         let method = methods[methodNum++];
         let tr = document.createElement('tr');
@@ -309,13 +311,17 @@
 
         let valid = tjqTime > minAccuracy * 100;
         let jqValid = valid && jqTime > minAccuracy * 100 && jqTime / tjqTime < 100;
-        let zValid = valid && zTime > minAccuracy * 100;
+        let zValid = !zeptoNotSupported && valid && zTime > minAccuracy * 100;
         validCount += jqValid ? 1 : 0;
         zValidCount += zValid ? 1 : 0;
         jqImprovement = jqValid ? (jqTime - tjqTime > 0 ? (jqTime - tjqTime) / tjqTime : (tjqTime - jqTime) / jqTime * -1) : 0;
         zImprovement = zValid ? (zTime - tjqTime > 0 ? (zTime - tjqTime) / tjqTime : (tjqTime - zTime) / zTime * -1) : 0;
         improvementTotal += jqImprovement;
         zImprovementTotal += zImprovement;
+
+        if (method == "$divs.closest('span')") {
+          zeptoNotSupported = true;
+        }
 
         let td = document.createElement('td');
         td.textContent = method;
