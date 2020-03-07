@@ -75,11 +75,9 @@ Additionally, [jQuery Once](https://github.com/RobLoach/jquery-once) functionali
 - `.once()`
 
 ## Supported Special Query Selectors
-- `:is()`
 - `:has()`
 - `:not()`
 - `:contains()`
-- `:lang()`
 - `:visible`
 - `:hidden`
 - `:parent`

@@ -117,6 +117,7 @@
         "$divs = $('div')",
         "$('span', $divs)",
         "$divs.toArray()",
+        "$divs.sort()",
         "$divs.add('span')",
         "$divs.each((e) => 1)",
         "$divs.is('span')",
@@ -135,8 +136,6 @@
         "$divs.attr('data-t', '1')",
         "$divs.attr('data-t')",
         "$divs.removeAttr('data-t')",
-        "$divs.prop('t', '1')",
-        "$divs.prop('t')",
         "$divs.data('t', '1')",
         "$divs.data('t')",
         "$divs.toggleClass('t')",
@@ -158,15 +157,14 @@
         "$divs.prevUntil('div')",
         "$divs.prevAll('div')",
         
-        "$divs.find('div span:first-child')",
-        "$divs.find('div span:contains(Here)')",
-        "$divs.find('div span:visible')",
-        "$divs.find('div span:hidden')",
-        "$divs.find('div span:parent')",
-        "$divs.find('span div:has(div span:hidden)')",
-        "$divs.find('span div:not(div span:hidden)')",
-        "$divs.find('div span:lang(en)')",
-        "$divs.find(':visible')",
+        "$divs.find('div span:contains(Here) div')",
+        "$divs.find('div span:visible div')",
+        "$divs.find('div span:hidden div')",
+        "$divs.find('div span:parent div')",
+        "$divs.find('div:has(div span) span')",
+        "$divs.find('div:not(div span) span')",
+        // "$('div:odd span:even')",
+        "$('div span:even div')",
         
         // "$divs.not('div span:contains(Here)')",
         // "$divs.not('div span:visible')",
@@ -296,10 +294,10 @@
         // console.log($tjqDivs.b)
         // console.log($jqDivs.b)
         if ($tjqDivs.b instanceof Array) {
-          pass = $tjqDivs.b.length === $jqDivs.b.length;
           let i = 0;
           let res = Array.from($jqDivs.b);
-          pass = pass && $tjqDivs.b.every((elem) => res.includes(elem));
+          pass = jQuery.unique($tjqDivs.b).length === jQuery.unique(res).length;
+          pass = pass && $tjqDivs.b.every((elem, i) => res.includes(elem));
           i = 0;
           // $jqDivs.b.each((i, elem) => { if($tjqDivs.b[i++] !== elem) throw elem });
           // pass = $tjqDivs.b.length + " " + $jqDivs.b.length;
