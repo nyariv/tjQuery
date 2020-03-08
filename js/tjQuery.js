@@ -19,8 +19,8 @@ const tjQueryComponents = (() => {
    * Storage holding element related data that will self delete when
    * the element no longer exists.
    */
-  let elementStorage = new WeakMap();
-  let selectorCache = new Map();
+  const elementStorage = new WeakMap();
+  const selectorCache = new Map();
 
   /**
    * tjQuery collection of Elements with mimicked jQuery api.
@@ -552,6 +552,9 @@ const tjQueryComponents = (() => {
      */
     attr(key, set) {
       if(objectOrProp(key, set, (k, v) => {
+        if (k.startsWith("on")) throw new Error("on* attributes are not allowed: " + k);
+        if ((v + "").match(/^\s*javascript:/)) throw new Error('"javascript:*" attribute values are not allowed:' + v);
+        if (k.match(/^[^a-zA-Z]/)) throw new Error("Attributes must start with alphanumeric characters: " + k)
         this.each((index, elem) => {
           elem.setAttribute(k, v);
         });
@@ -751,6 +754,7 @@ const tjQueryComponents = (() => {
      * @returns {Element}
      */
     get(index) {
+      index = +index;
       return this[index < 0 ? this.length + index : index];
     }
 
@@ -796,9 +800,13 @@ const tjQueryComponents = (() => {
      * @param {number} index
      * @returns {TjQueryCollection}
      */
-    eq(index) {
-      let elem = this.get(index)
-      return elem  ? new TjQueryCollection(elem) : new TjQueryCollection();
+    eq(index) 
+    {
+      const res = new TjQueryCollection(1);
+      const elem = this.get(index);
+      if (elem) res[0] = elem;
+      else res.pop();
+      return res;
     }
 
     /**
@@ -1253,10 +1261,16 @@ const tjQueryComponents = (() => {
   }
 
   /**
+   * @callback objectOrPropCallback
+   * @param {string} key
+   * @param {*} value
+   */
+
+  /**
    * Helper function for excuting by name/value or multiple object key/value pairs.
    * @param {string|object} name the string may also be space separated for multi value.
    * @param {*} [set]
-   * @param {function} each 
+   * @param {objectOrPropCallback} each 
    * @returns {boolean} whether a key/value pair was provided.
    */
   function objectOrProp(name, set, each) {
